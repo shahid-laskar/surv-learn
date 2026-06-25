@@ -85,7 +85,7 @@ pathDefaults:
   runOnNotReady: /scripts/camera_down.sh
   
   # Upload to MinIO on record segment complete
-  runOnRecordSegmentComplete: /scripts/notify_segment.sh %{path} %{file}
+  runOnRecordSegmentComplete: /scripts/notify_segment.sh 
   
   # Source configuration  
   sourceFingerprint: ""

@@ -7,6 +7,7 @@ volumes:
   redis_data:  
   hls_segments:
   recordings:
+  minio_data:
 
 services:
   postgres:
@@ -46,9 +47,16 @@ services:
       retries: 5
 
   mediamtx:
-    image: bluenviron/mediamtx:latest-ffmpeg
+    build:
+      context: .
+      dockerfile: Dockerfile.mediamtx
     container_name: surv_mediamtx
     restart: unless-stopped
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: recordings
     networks:
       - surv_net
     ports:
@@ -61,6 +69,71 @@ services:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
       - hls_segments:/var/hls
       - ./recordings:/recordings
+      - ./scripts:/scripts
+      - ./workers/upload_to_minio.py:/app/upload_to_minio.py:ro
+      - ./workers/test_presign.py:/app/test_presign.py:ro
+
+  minio:
+    image: minio/minio:latest
+    container_name: surv_minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - surv_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+  
+  minio_init:
+    image: minio/mc:latest
+    container_name: surv_minio_init
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+
+        mc mb local/recordings --ignore-existing;
+        mc mb local/snapshots --ignore-existing;
+
+        echo 'Buckets initialized';
+      "
+    networks:
+      - surv_net
+
+  uploader:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: surv_uploader
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio_init:
+        condition: service_completed_successfully
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: recordings      
+    volumes:
+      - ./recordings:/recordings
+      - ./workers:/app
+    networks:
+      - surv_net
 
   nginx_hls:
     image: nginx:1.27-alpine
