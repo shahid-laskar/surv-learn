@@ -79,7 +79,7 @@ pathDefaults:
   recordPath: /recordings/%path/%Y/%m/%d/%H-%M-%S-%f 
   recordFormat: fmp4
   recordPartDuration: 1s
-  recordSegmentDuration: 20s
+  recordSegmentDuration: 60s
   recordDeleteAfter: 0s
   runOnReady: /scripts/camera_ready.sh
   runOnNotReady: /scripts/camera_down.sh

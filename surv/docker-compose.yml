@@ -57,6 +57,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: recordings
+      SEGMENT_DURATION_SECONDS: ${SEGMENT_DURATION_SECONDS}
     networks:
       - surv_net
     ports:
@@ -113,11 +114,32 @@ services:
     networks:
       - surv_net
 
-  uploader:
+  # uploader:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.worker
+  #   container_name: surv_uploader
+  #   restart: unless-stopped
+  #   depends_on:
+  #     minio:
+  #       condition: service_healthy
+  #     minio_init:
+  #       condition: service_completed_successfully
+  #   environment:
+  #     MINIO_ENDPOINT: minio:9000
+  #     MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+  #     MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+  #     MINIO_BUCKET: recordings      
+  #   volumes:
+  #     - ./recordings:/recordings
+  #     - ./workers:/app
+  #   networks:
+  #     - surv_net
+  snapshotter:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    container_name: surv_uploader
+    container_name: surv_snapshotter
     restart: unless-stopped
     depends_on:
       minio:
@@ -128,13 +150,14 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET: recordings      
-    volumes:
-      - ./recordings:/recordings
-      - ./workers:/app
+      MINIO_BUCKET_SNAPSHOTS: snapshots
+      MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
+      CAMERA_PATHS: CAMKRTVM00001
+      SNAPSHOT_INTERVAL_SECONDS: "30"
     networks:
       - surv_net
-
+    command: python /app/snapshot_worker.py
+    
   nginx_hls:
     image: nginx:1.27-alpine
     container_name: surv_nginx_hls
