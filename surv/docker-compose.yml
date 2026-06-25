@@ -1,0 +1,78 @@
+networks:
+  surv_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:  
+  hls_segments:
+  recordings:
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: surv_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - surv_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: surv_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - surv_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    container_name: surv_mediamtx
+    restart: unless-stopped
+    networks:
+      - surv_net
+    ports:
+      - "${MEDIAMTX_RTSP_PORT}:8554"
+      - "${MEDIAMTX_HLS_PORT}:8888"
+      - "${MEDIAMTX_WEBRTC_PORT}:8889"
+      - "8189:8189/udp"
+      - "${MEDIAMTX_API_PORT}:9997"
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - hls_segments:/var/hls
+      - ./recordings:/recordings
+
+  nginx_hls:
+    image: nginx:1.27-alpine
+    container_name: surv_nginx_hls
+    restart: unless-stopped
+    networks:
+      - surv_net
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - hls_segments:/var/hls:ro
+    depends_on:
+      - mediamtx

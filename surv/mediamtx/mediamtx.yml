@@ -1,0 +1,104 @@
+# mediamtx/mediamtx.yml
+# MediaMTX Configuration
+
+# General
+logLevel: info
+logDestinations: [stdout]
+logFile: ""
+
+# Authentication - DISABLE for Kong to handle JWT
+authMethod: internal
+
+# Control API
+api: true
+apiAddress: :9997
+
+authInternalUsers:
+  # Allow ANY user from ANY IP to do everything (no authentication)
+  # Kong will handle JWT authentication before requests reach MediaMTX
+  - user: any
+    pass:
+    ips: []
+    permissions:
+    - action: publish
+      path:
+    - action: read
+      path:
+    - action: playback
+      path:
+    - action: api
+      path:
+    - action: metrics
+      path:
+    - action: pprof
+      path:
+
+# RTSP server
+rtsp: true
+rtspAddress: :8554
+rtspEncryption: "no"
+rtspServerKey: ""
+rtspServerCert: ""
+
+# RTMP server
+rtmp: true
+rtmpAddress: :1935
+rtmpEncryption: "no"
+rtmpServerKey: ""
+rtmpServerCert: ""
+
+# HLS server
+hls: true
+hlsAddress: :8888
+hlsEncryption: false
+hlsServerKey: ""
+hlsServerCert: ""
+hlsAllowOrigins:
+  - "*"
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+hlsDirectory: /var/hls
+
+# WebRTC server
+webrtc: true
+webrtcAddress: :8889
+webrtcEncryption: false
+webrtcServerKey: ""
+webrtcServerCert: ""
+webrtcAllowOrigins:
+  - "*"
+webrtcICEServers2: []
+
+# Path defaults
+pathDefaults:
+  # Recording
+  record: true
+  recordPath: /recordings/%path/%Y/%m/%d/%H-%M-%S-%f 
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 20s
+  recordDeleteAfter: 0s
+  runOnReady: /scripts/camera_ready.sh
+  runOnNotReady: /scripts/camera_down.sh
+  
+  # Upload to MinIO on record segment complete
+  runOnRecordSegmentComplete: /scripts/notify_segment.sh %{path} %{file}
+  
+  # Source configuration  
+  sourceFingerprint: ""
+  sourceRedirect: ""
+
+# Paths (cameras will be added dynamically via API)
+#paths: {}
+
+# paths:
+#   all:
+#     source: publisher
+
+paths:
+  CAMKRTVM00001:
+    source: rtsp://admin:admin@10.44.0.219:554/unicaststream/1
+    sourceProtocol: tcp
