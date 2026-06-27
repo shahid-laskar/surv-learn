@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-
+from kafka import KafkaProducer
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s"
@@ -110,7 +110,52 @@ def upload_metadata(client: Minio, filepath: Path, object_name: str,
     logger.info(f"  end:     {meta['segment_end_utc']}")
     logger.info(f"  size:    {meta['file_size_bytes']} bytes")
 
+def publish_segment_event(filepath: Path, object_name: str,
+                          segment_start: datetime | None) -> None:
+    """
+    Publish a recording.segments event to Kafka.
+    Downstream consumers (Django) use this to insert VideoSegment rows.
+    """
+    bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=bootstrap,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            retries=3,
+            request_timeout_ms=5000,
+        )
 
+        segment_end = (
+            segment_start + timedelta(seconds=SEGMENT_DURATION_SECS)
+            if segment_start else None
+        )
+        camera_path = filepath.parent.parent.parent.parent.name
+
+        event = {
+            "schema_version":   "1.0",
+            "event_type":       "recording.segment.uploaded",
+            "camera_path":      camera_path,
+            "object_key":       object_name,
+            "bucket":           MINIO_BUCKET,
+            "segment_start_utc": segment_start.isoformat() if segment_start else None,
+            "segment_end_utc":   segment_end.isoformat()   if segment_end   else None,
+            "duration_seconds":  SEGMENT_DURATION_SECS,
+            "file_size_bytes":   filepath.stat().st_size,
+            "uploaded_at":       datetime.now(timezone.utc).isoformat(),
+        }
+
+        producer.send(
+            "recording.segments",
+            key=camera_path.encode("utf-8"),
+            value=event
+        )
+        producer.flush()
+        producer.close()
+        logger.info(f"Kafka event published for {object_name}")
+
+    except Exception as e:
+        # Kafka failure must never block the upload — log and continue
+        logger.warning(f"Kafka publish failed (non-fatal): {e}")
 def main():
     if len(sys.argv) < 2:
         logger.error("Usage: upload_to_minio.py <filepath>")
@@ -132,6 +177,7 @@ def main():
     segment_start = parse_segment_start(filepath)
     object_name   = upload_segment(client, filepath)
     upload_metadata(client, filepath, object_name, segment_start)
+    publish_segment_event(filepath, object_name, segment_start)
 
 
 if __name__ == "__main__":

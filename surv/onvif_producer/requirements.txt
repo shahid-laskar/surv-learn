@@ -1,0 +1,4 @@
+onvif-zeep>=0.2.12
+kafka-python>=2.0.2
+psycopg2-binary>=2.9
+lxml>=5.0
