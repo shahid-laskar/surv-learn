@@ -24,12 +24,12 @@ DB_URL          = os.getenv("DATABASE_URL",             "postgresql://surv:chang
 
 def get_consumer() -> KafkaConsumer:
     return KafkaConsumer(
-        "camera.motion",
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id=KAFKA_GROUP_ID,
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         auto_offset_reset="earliest", 
         enable_auto_commit=True,
+        api_version=(3, 7, 0),
         max_poll_interval_ms=300000,
     )
 
