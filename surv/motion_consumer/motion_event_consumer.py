@@ -7,7 +7,6 @@ motion_event rows to PostgreSQL.
 import os
 import json
 import logging
-from datetime import datetime, timezone
 from kafka import KafkaConsumer
 import psycopg2
 
@@ -23,13 +22,16 @@ DB_URL          = os.getenv("DATABASE_URL",             "postgresql://surv:chang
 
 
 def get_consumer() -> KafkaConsumer:
+    # Topic passed to constructor — kafka-python's subscribe() doesn't
+    # support on_assign/on_revoke callbacks unlike confluent-kafka.
+    # api_version omitted so the client auto-detects from the broker.
     return KafkaConsumer(
+        "camera.motion",
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id=KAFKA_GROUP_ID,
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        auto_offset_reset="earliest", 
+        auto_offset_reset="earliest",
         enable_auto_commit=True,
-        api_version=(3, 7, 0),
         max_poll_interval_ms=300000,
     )
 
@@ -60,26 +62,19 @@ def handle_motion_ended(conn, camera_id: int, timestamp: str):
     if row:
         log.info(f"Motion ENDED — camera_id={camera_id}, event_id={row[0]}")
     else:
-        log.warning(f"Motion ended but no active event found for camera_id={camera_id}")
+        log.warning(f"Motion ended but no active event for camera_id={camera_id}")
 
 
 def main():
     log.info("Motion event consumer starting...")
     conn     = psycopg2.connect(DB_URL)
     consumer = get_consumer()
-    
-    # Log partition assignment
-    consumer.subscribe(
-        ["camera.motion"],
-        on_assign=lambda c, ps: log.info(f"Partitions assigned: {[p.partition for p in ps]}"),
-        on_revoke=lambda c, ps: log.info(f"Partitions revoked: {[p.partition for p in ps]}"),
-    )
 
-    log.info("Waiting for messages...")
+    log.info("Subscribed to camera.motion — waiting for messages...")
     for msg in consumer:
         log.info(f"Received message partition={msg.partition} offset={msg.offset}")
         event = msg.value
-    
+
         try:
             camera_id  = event.get("camera_id")
             event_type = event.get("event_type")
