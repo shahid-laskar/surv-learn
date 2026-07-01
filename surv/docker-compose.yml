@@ -48,6 +48,106 @@ services:
       interval: 10s
       timeout:  5s
       retries:  5
+  # ─────────────────────────────────────────────────────────────────────────
+  # KONG API GATEWAY
+  # ─────────────────────────────────────────────────────────────────────────
+  kong-db-init:
+    image: postgres:16
+    container_name: surv_kong_db_init
+    networks:
+      - surv_net
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: >
+      /bin/sh -c "
+        until pg_isready -h postgres -U ${POSTGRES_USER}; do sleep 2; done;
+        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -tc \"SELECT 1 FROM pg_database WHERE datname = 'kong'\" | grep -q 1 || psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c 'CREATE DATABASE kong;';
+        echo 'Kong database ready';
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  kong-migration:
+    image: kong:3.6
+    container_name: surv_kong_migration
+    networks:
+      - surv_net
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE:    postgres
+      KONG_PG_HOST:     postgres
+      KONG_PG_USER:     ${POSTGRES_USER}
+      KONG_PG_PASSWORD: ${POSTGRES_PASSWORD}
+      KONG_PG_DATABASE: kong
+    depends_on:
+      kong-db-init:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  kong:
+    image: kong:3.6
+    container_name: surv_kong
+    restart: unless-stopped
+    networks:
+      - surv_net
+    ports:
+      - "${KONG_PROXY_PORT}:8000"
+      - "${KONG_PROXY_SSL_PORT}:8443"
+      - "${KONG_ADMIN_PORT}:8001"
+    environment:
+      KONG_DATABASE:        postgres
+      KONG_PG_HOST:         postgres
+      KONG_PG_USER:         ${POSTGRES_USER}
+      KONG_PG_PASSWORD:     ${POSTGRES_PASSWORD}
+      KONG_PG_DATABASE:     kong
+      KONG_PROXY_LISTEN:    0.0.0.0:8000
+      KONG_ADMIN_LISTEN:    0.0.0.0:8001
+      KONG_PLUGINS:         bundled,jwt
+      KONG_LOG_LEVEL:       info
+    depends_on:
+      kong-migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test:     ["CMD", "kong", "health"]
+      interval: 10s
+      timeout:  10s
+      retries:  10
+      start_period: 15s
+
+  kong-config:
+    image: curlimages/curl:8.8.0
+    container_name: surv_kong_config
+    networks:
+      - surv_net
+    volumes:
+      - ./kong/setup-kong-jwt.sh:/setup-kong-jwt.sh:ro
+    entrypoint: ["/bin/sh", "/setup-kong-jwt.sh"]
+    environment:
+      KONG_JWT_ISSUER: ${KONG_JWT_ISSUER}
+      KONG_JWT_SECRET: ${KONG_JWT_SECRET}
+    depends_on:
+      kong:
+        condition: service_healthy
+
+  konga:
+    image: pantsel/konga:latest
+    container_name: surv_konga
+    restart: unless-stopped
+    networks:
+      - surv_net
+    ports:
+      - "1337:1337"
+    environment:
+      DB_ADAPTER: postgres
+      DB_HOST:    postgres
+      DB_USER:    ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_DATABASE: konga
+      NODE_ENV:   production
+    depends_on:
+      kong:
+        condition: service_healthy
 
   kafka:
     image: apache/kafka:3.7.0
@@ -228,7 +328,6 @@ services:
 # ─────────────────────────────────────────────────────────────────────────────
 # FASTAPI APPLICATION
 # ─────────────────────────────────────────────────────────────────────────────
-  
   app:
     build:
       context: .
@@ -237,8 +336,11 @@ services:
     restart: unless-stopped
     networks:
       - surv_net
-    ports:
-      - "8000:8000"
+    # NOTE: port 8000 is intentionally NOT published to the host anymore.
+    # Kong (also on :8000, but on the HOST) is now the only public entry
+    # point — see Phase 7. FastAPI is reachable only inside the Docker
+    # network at http://app:8000, which Kong's "surv-api" service proxies to.
+    # For direct debugging, use: docker compose exec app curl localhost:8000/health
     environment:
       DATABASE_URL:             postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SYNC_DATABASE_URL:        postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -252,7 +354,8 @@ services:
       MEDIAMTX_HLS_BASE:        ${MEDIAMTX_HLS_BASE}
       MEDIAMTX_WEBRTC_BASE:     ${MEDIAMTX_WEBRTC_BASE}
       KAFKA_BOOTSTRAP_SERVERS:  ${KAFKA_BOOTSTRAP_SERVERS}
-      SECRET_KEY:               ${SECRET_KEY}
+      KONG_JWT_ISSUER:          ${KONG_JWT_ISSUER}
+      KONG_JWT_SECRET:          ${KONG_JWT_SECRET}
       ALGORITHM:                ${ALGORITHM}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       DEBUG:                    ${DEBUG}
@@ -263,6 +366,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
   # Runs Alembic migrations then exits — must complete before app handles requests
   db_migrate:
     build:

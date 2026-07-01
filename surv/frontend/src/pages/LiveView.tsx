@@ -1,25 +1,43 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Maximize2, RefreshCw } from 'lucide-react'
-import { fetchCameras, type Camera } from '../api/client'
+import { fetchCameras, fetchHlsUrl, type Camera } from '../api/client'
 import HLSPlayer from '../components/HLSPlayer'
 import StatusBadge from '../components/StatusBadge'
-
-const HLS_BASE = import.meta.env.VITE_HLS_BASE ?? 'http://localhost:8080/hls'
 
 type GridN = 1 | 2 | 4
 
 function CameraCell({ cam, onExpand }: { cam: Camera; onExpand: () => void }) {
+  // Each camera now needs its own token-embedded URL, fetched from FastAPI
+  // through Kong rather than constructed client-side. Cached/refetched
+  // every 50 minutes since stream tokens expire after 1 hour (server-side).
+  const { data: streamInfo } = useQuery({
+    queryKey: ['hls-url', cam.cam_id],
+    queryFn:  () => fetchHlsUrl(cam.cam_id),
+    enabled:  cam.is_online,
+    staleTime: 50 * 60 * 1000,
+    refetchInterval: 50 * 60 * 1000,
+  })
+
   return (
     <div className="relative bg-card border border-border rounded overflow-hidden
                     group hover:border-accent/40 transition-colors"
          style={{ aspectRatio: '16/9' }}>
-      <HLSPlayer
-        src={`${HLS_BASE}/${cam.cam_id}/index.m3u8`}
-        camId={cam.cam_id}
-        isOnline={cam.is_online}
-        className="absolute inset-0"
-      />
+      {streamInfo ? (
+        <HLSPlayer
+          src={streamInfo.hls_url}
+          camId={cam.cam_id}
+          isOnline={cam.is_online}
+          className="absolute inset-0"
+        />
+      ) : (
+        <HLSPlayer
+          src=""
+          camId={cam.cam_id}
+          isOnline={false}
+          className="absolute inset-0"
+        />
+      )}
       {/* Hover bar */}
       <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between
                       px-2 py-1.5 bg-linear-to-t from-surface/90 to-transparent

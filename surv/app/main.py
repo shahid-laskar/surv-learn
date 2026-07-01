@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import cameras, streams, recordings, motion, health
+from app.routers import cameras, streams, recordings, motion, health, auth, stream_auth
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,11 +34,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health.router,     prefix="/api/v1")
-app.include_router(cameras.router,    prefix="/api/v1")
-app.include_router(streams.router,    prefix="/api/v1")
-app.include_router(recordings.router, prefix="/api/v1")
-app.include_router(motion.router,     prefix="/api/v1")
+app.include_router(health.router,       prefix="/api/v1")
+app.include_router(auth.router,         prefix="/api/v1")
+app.include_router(stream_auth.router,  prefix="/api/v1")  # called by MediaMTX, not Kong
+app.include_router(cameras.router,      prefix="/api/v1")
+app.include_router(streams.router,      prefix="/api/v1")
+app.include_router(recordings.router,   prefix="/api/v1")
+app.include_router(motion.router,       prefix="/api/v1")
 
 
 @app.get("/health", tags=["health"])

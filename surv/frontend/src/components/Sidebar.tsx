@@ -1,7 +1,13 @@
 import { NavLink } from 'react-router-dom'
-import { Video, PlaySquare, Bell, Camera, Activity } from 'lucide-react'
+import { Video, PlaySquare, Bell, Camera, Activity, LogOut } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
-import { fetchCameras, fetchActiveMotion, type Camera as CameraType, type MotionEvent } from '../api/client'
+import {
+  fetchCameras,
+  fetchActiveMotion,
+  logout,
+  type Camera as CameraType,
+  type MotionEvent,
+} from '../api/client'
 
 const NAV = [
   { to: '/',         icon: Video,      label: 'Live View'     },
@@ -16,6 +22,8 @@ export default function Sidebar() {
 
   const onlineCount  = cameras.filter(c => c.is_online).length
   const offlineCount = cameras.length - onlineCount
+  const username = localStorage.getItem('username') ?? 'user'
+  const role     = localStorage.getItem('role') ?? 'operator'
 
   return (
     <aside className="flex flex-col w-56 h-screen bg-panel border-r border-border shrink-0">
@@ -82,7 +90,7 @@ export default function Sidebar() {
         <p className="px-3 font-mono text-[10px] text-muted uppercase tracking-widest mb-2">
           Cameras
         </p>
-        <div className="space-y-0.5 max-h-48 overflow-y-auto">
+        <div className="space-y-0.5 max-h-40 overflow-y-auto">
           {cameras.map(cam => (
             <NavLink
               key={cam.cam_id}
@@ -105,6 +113,21 @@ export default function Sidebar() {
             <p className="px-3 text-xs text-muted/60 italic">No cameras</p>
           )}
         </div>
+      </div>
+
+      {/* User / logout */}
+      <div className="border-t border-border px-4 py-3 flex items-center justify-between">
+        <div className="min-w-0">
+          <p className="text-xs text-slate-300 truncate">{username}</p>
+          <p className="font-mono text-[9px] text-muted uppercase">{role}</p>
+        </div>
+        <button
+          onClick={logout}
+          title="Log out"
+          className="p-1.5 text-muted hover:text-alert hover:bg-border rounded transition-colors"
+        >
+          <LogOut size={14} />
+        </button>
       </div>
     </aside>
   )

@@ -84,16 +84,23 @@ def main():
                 log.warning(f"Invalid event skipped: {event}")
                 continue
 
-            if event_type == "motion.started":
-                handle_motion_started(conn, camera_id, timestamp)
-            elif event_type == "motion.ended":
-                handle_motion_ended(conn, camera_id, timestamp)
-            else:
+            if event_type not in ("motion.started", "motion.ended"):
                 log.debug(f"Ignored event_type={event_type}")
+                continue
 
-        except psycopg2.OperationalError:
-            log.error("DB connection lost — reconnecting...")
-            conn = psycopg2.connect(DB_URL)
+            for attempt in range(2):
+                try:
+                    if event_type == "motion.started":
+                        handle_motion_started(conn, camera_id, timestamp)
+                    else:
+                        handle_motion_ended(conn, camera_id, timestamp)
+                    break
+                except psycopg2.Error as db_err:
+                    if attempt == 0:
+                        log.warning(f"DB connection issue ({db_err}) — reconnecting...")
+                        conn = psycopg2.connect(DB_URL)
+                    else:
+                        raise
         except Exception as e:
             log.error(f"Error processing event: {e} | raw={event}")
 

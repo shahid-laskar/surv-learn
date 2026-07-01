@@ -1,5 +1,8 @@
 import axios from 'axios'
 
+// All traffic now goes through Kong on :8000, which proxies /api → FastAPI
+// and /hls → nginx_hls. No more direct :8000 (FastAPI) or :8080 (nginx_hls)
+// access from the browser.
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 const api = axios.create({
@@ -12,6 +15,22 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
+
+// On 401, clear the stale token and bounce to login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('username')
+      localStorage.removeItem('role')
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -64,13 +83,51 @@ export interface Timeline {
   segments:       Segment[]
 }
 
-export interface HlsUrlResponse {
-  cam_id:  string
-  hls_url: string
-  ready:   boolean
+export interface StreamTokenResponse {
+  cam_id:     string
+  hls_url:    string
+  token:      string
+  expires_at: string
 }
 
-// ── API calls ──────────────────────────────────────────────
+export interface LoginResponse {
+  access_token: string
+  token_type:   string
+  expires_in:   number
+  username:     string
+  role:         string
+}
+
+export interface CurrentUser {
+  id:         number
+  username:   string
+  full_name:  string | null
+  role:       string
+  is_active:  boolean
+  last_login: string | null
+  created_at: string
+}
+
+// ── Auth ───────────────────────────────────────────────────
+
+export const login = (username: string, password: string) =>
+  api.post<LoginResponse>('/auth/login', { username, password }).then(r => r.data)
+
+export const fetchMe = () =>
+  api.get<CurrentUser>('/auth/me').then(r => r.data)
+
+export function logout() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('username')
+  localStorage.removeItem('role')
+  window.location.href = '/login'
+}
+
+export function isAuthenticated(): boolean {
+  return !!localStorage.getItem('token')
+}
+
+// ── Cameras ────────────────────────────────────────────────
 
 export const fetchCameras   = () =>
   api.get<Camera[]>('/cameras/').then(r => r.data)
@@ -87,6 +144,13 @@ export const updateCamera   = (camId: string, payload: Partial<CameraCreate & { 
 export const deleteCamera   = (camId: string) =>
   api.delete(`/cameras/${camId}`)
 
+// ── Streams (now returns a token-embedded URL) ────────────────────────────
+
+export const fetchHlsUrl = (camId: string) =>
+  api.get<StreamTokenResponse>(`/streams/${camId}/hls-url`).then(r => r.data)
+
+// ── Motion ─────────────────────────────────────────────────
+
 export const fetchMotionEvents = (params?: {
   camera_id?: number
   active?:    boolean
@@ -95,6 +159,8 @@ export const fetchMotionEvents = (params?: {
 
 export const fetchActiveMotion = () =>
   api.get<MotionEvent[]>('/motion/active').then(r => r.data)
+
+// ── Recordings ─────────────────────────────────────────────
 
 export const fetchTimeline  = (camId: string, date: string) =>
   api.get<Timeline>(`/recordings/${camId}/timeline`, { params: { date } }).then(r => r.data)

@@ -6,32 +6,22 @@ logLevel: info
 logDestinations: [stdout]
 logFile: ""
 
-# Authentication - DISABLE for Kong to handle JWT
-authMethod: internal
+# ── Authentication ──────────────────────────────────────────────────────────
+# Switched from "internal" (open to anyone) to "http" — every publish/read/
+# playback attempt is validated by FastAPI's /api/v1/auth/stream webhook.
+# Camera RTSP publish (internal network only) still needs no token since the
+# webhook returns 200 unconditionally for "publish" actions — only read/
+# playback (i.e. HLS/WebRTC viewers) are token-gated.
+authMethod: http
+authHTTPAddress: http://app:8000/api/v1/auth/stream
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
 
 # Control API
 api: true
 apiAddress: :9997
-
-authInternalUsers:
-  # Allow ANY user from ANY IP to do everything (no authentication)
-  # Kong will handle JWT authentication before requests reach MediaMTX
-  - user: any
-    pass:
-    ips: []
-    permissions:
-    - action: publish
-      path:
-    - action: read
-      path:
-    - action: playback
-      path:
-    - action: api
-      path:
-    - action: metrics
-      path:
-    - action: pprof
-      path:
 
 # RTSP server
 rtsp: true
@@ -76,28 +66,22 @@ webrtcICEServers2: []
 pathDefaults:
   # Recording
   record: true
-  recordPath: /recordings/%path/%Y/%m/%d/%H-%M-%S-%f 
+  recordPath: /recordings/%path/%Y/%m/%d/%H-%M-%S-%f
   recordFormat: fmp4
   recordPartDuration: 1s
   recordSegmentDuration: 60s
   recordDeleteAfter: 0s
   runOnReady: /scripts/camera_ready.sh
   runOnNotReady: /scripts/camera_down.sh
-  
+
   # Upload to MinIO on record segment complete
-  runOnRecordSegmentComplete: /scripts/notify_segment.sh 
-  
-  # Source configuration  
+  runOnRecordSegmentComplete: /scripts/notify_segment.sh
+
+  # Source configuration
   sourceFingerprint: ""
   sourceRedirect: ""
 
 # Paths (cameras will be added dynamically via API)
-#paths: {}
-
-# paths:
-#   all:
-#     source: publisher
-
 paths:
   CAMKRTVM00001:
     source: rtsp://admin:admin@10.44.0.219:554/unicaststream/1

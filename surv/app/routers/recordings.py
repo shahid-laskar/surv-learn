@@ -1,22 +1,27 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, timedelta, timezone
+from typing import List
+
 from app.database import get_db
 from app.models.camera import Camera, VideoSegment
 from app.services.minio_service import get_presigned_url
 from app.schemas.recording import TimelineOut, SegmentOut
+from app.dependencies.auth import get_current_user, CurrentUser
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/recordings", tags=["recordings"])
 
 
 @router.get("/{cam_id}/timeline", response_model=TimelineOut)
 async def get_timeline(
     cam_id: str,
-    date: str = Query(..., example="2026-06-27"),
-    db: AsyncSession = Depends(get_db),
+    date:   str = Query(..., example="2026-06-27", description="YYYY-MM-DD"),
+    db:     AsyncSession = Depends(get_db),
+    _user:  CurrentUser = Depends(get_current_user),
 ):
-    # Validate camera exists
     cam_result = await db.execute(select(Camera).where(Camera.cam_id == cam_id))
     cam = cam_result.scalar_one_or_none()
     if not cam:
@@ -33,17 +38,18 @@ async def get_timeline(
         select(VideoSegment)
         .where(VideoSegment.camera_id == cam.id)
         .where(VideoSegment.segment_start >= day_start)
-        .where(VideoSegment.segment_start < day_end)
-        .where(VideoSegment.deleted_at == None)
+        .where(VideoSegment.segment_start <  day_end)
+        .where(VideoSegment.deleted_at    == None)   # noqa: E711
         .order_by(VideoSegment.segment_start)
     )
     segments = seg_result.scalars().all()
 
-    out = []
+    out: List[SegmentOut] = []
     for seg in segments:
         try:
             url = get_presigned_url(seg.object_key, seg.bucket)
-        except Exception:
+        except Exception as e:
+            log.warning(f"Presign failed for {seg.object_key}: {e}")
             url = ""
         out.append(SegmentOut(
             segment_id=seg.id,
@@ -63,17 +69,24 @@ async def get_timeline(
 
 @router.get("/{cam_id}/download")
 async def get_download_url(
-    cam_id: str,
-    object_key: str = Query(...),
-    db: AsyncSession = Depends(get_db),
+    cam_id:     str,
+    object_key: str = Query(..., description="MinIO object key of the segment"),
+    db:         AsyncSession = Depends(get_db),
+    _user:      CurrentUser = Depends(get_current_user),
 ):
-    # Validate the segment belongs to this camera
+    cam_result = await db.execute(select(Camera).where(Camera.cam_id == cam_id))
+    cam = cam_result.scalar_one_or_none()
+    if not cam:
+        raise HTTPException(404, f"Camera '{cam_id}' not found")
+
     seg_result = await db.execute(
-        select(VideoSegment).where(VideoSegment.object_key == object_key)
+        select(VideoSegment)
+        .where(VideoSegment.object_key == object_key)
+        .where(VideoSegment.camera_id  == cam.id)
     )
     seg = seg_result.scalar_one_or_none()
     if not seg:
-        raise HTTPException(404, "Segment not found")
+        raise HTTPException(404, "Segment not found for this camera")
 
     url = get_presigned_url(object_key, expires_in=3600)
     return {"download_url": url, "expires_in": 3600}

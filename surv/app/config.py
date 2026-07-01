@@ -3,7 +3,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    # Database — two URLs: async for FastAPI, sync for Alembic/workers
+    # Database
     database_url: str = "postgresql+asyncpg://surv:changeme@postgres:5432/sarvanetra"
     sync_database_url: str = "postgresql://surv:changeme@postgres:5432/sarvanetra"
 
@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin123"
     minio_bucket_recordings: str = "recordings"
     minio_bucket_snapshots: str = "snapshots"
-    # Used for presigned URL generation — must be reachable from the browser
     minio_external_url: str = "http://localhost:9000"
 
     # MediaMTX
@@ -21,13 +20,19 @@ class Settings(BaseSettings):
     mediamtx_hls_base: str = "http://localhost:8080/hls"
     mediamtx_webrtc_base: str = "http://localhost:8889"
 
-    # Kafka — must match KAFKA_ADVERTISED_LISTENERS in docker-compose
+    # Kafka
     kafka_bootstrap_servers: str = "surv_kafka:9092"
 
-    # Auth
-    secret_key: str = "change-me-in-env"
+    # ── Kong JWT ──────────────────────────────────────────────────────────
+    # These MUST match the Kong consumer's JWT credential exactly.
+    # kong_jwt_issuer  → the consumer credential's "key" field (iss claim)
+    # kong_jwt_secret  → the consumer credential's "secret" field
+    # Provisioned together by kong/setup-kong-jwt.sh — see that script.
+    kong_jwt_issuer: str = "sarvanetra-app"
+    kong_jwt_secret: str = "change-me-to-a-long-random-string-matching-kong-consumer"
+
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 480
+    access_token_expire_minutes: int = 480  # 8 hours
 
     debug: bool = False
 
