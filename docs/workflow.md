@@ -237,7 +237,31 @@ Expected:
 
 ---
 
+# 1. Update .env with Kong vars (from env_kong_additions.txt) + the secret above
+# 2. Apply docker-compose.yml patches (Kong services + app service no longer exposing :8000)
+# 3. Rebuild app with new deps (passlib)
+docker compose build app frontend
 
+# 4. Run the new migration
+docker compose run --rm db_migrate
+
+# 5. Bring up Postgres-dependent Kong bootstrap first
+docker compose up -d kong-db-init
+docker compose up -d kong-migration
+docker compose up -d kong
+# wait for kong healthy
+docker compose up -d kong-config   # provisions routes/JWT/consumer — runs once
+docker compose up -d konga
+
+# 6. Create your first admin user directly in the DB (bootstrap — no UI exists yet for the very first user)
+docker compose exec app python3 -c "
+from app.services.auth_service import hash_password
+print(hash_password('Shahid1234'))
+"
+docker compose exec postgres psql -U surv -d sarvanetra -c "
+INSERT INTO survapp_user (username, password_hash, role, is_active)
+VALUES ('admin', '\$2b\$12\$4PiYtdRs5gssEaluoV7Luedi3lhGbf5BCCSl9ZYZAYqHCZ8aVXAQa.', 'admin', true);
+"
 
 
 
