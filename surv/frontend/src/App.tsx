@@ -6,6 +6,12 @@ import LiveView         from './pages/LiveView'
 import Playback         from './pages/Playback'
 import MotionEvents     from './pages/MotionEvents'
 import Cameras          from './pages/Cameras'
+import Organizations    from './pages/Organizations'
+import Customers        from './pages/Customers'
+import Users            from './pages/Users'
+import Roles            from './pages/Roles'
+import AuditLog         from './pages/AuditLog'
+import CameraGroups     from './pages/CameraGroups'
 
 function AppShell() {
   return (
@@ -13,11 +19,17 @@ function AppShell() {
       <Sidebar />
       <main className="flex-1 overflow-y-auto min-w-0">
         <Routes>
-          <Route path="/"         element={<LiveView />}     />
-          <Route path="/playback" element={<Playback />}     />
-          <Route path="/motion"   element={<MotionEvents />} />
-          <Route path="/cameras"  element={<Cameras />}      />
-          <Route path="*"         element={<Navigate to="/" replace />} />
+          <Route path="/"              element={<LiveView />}     />
+          <Route path="/playback"      element={<Playback />}     />
+          <Route path="/motion"        element={<MotionEvents />} />
+          <Route path="/cameras"       element={<Cameras />}      />
+          <Route path="/org"           element={<Organizations />} />
+          <Route path="/customers"     element={<Customers />}    />
+          <Route path="/users"         element={<Users />}        />
+          <Route path="/roles"         element={<Roles />}        />
+          <Route path="/audit"         element={<AuditLog />}     />
+          <Route path="/camera-groups" element={<CameraGroups />} />
+          <Route path="*"              element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>

@@ -25,9 +25,6 @@ class CameraUpdate(BaseModel):
     cam_ip:         Optional[str] = None
     cam_port:       Optional[int] = None
     rtsp_url:       Optional[str] = None
-    onvif_port:     Optional[int] = None
-    onvif_username: Optional[str] = None
-    onvif_password: Optional[str] = None
     customer_id:    Optional[int] = None
     customer_site_id: Optional[int] = None
     organization_id: Optional[int] = None

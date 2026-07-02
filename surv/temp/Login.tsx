@@ -19,10 +19,6 @@ export default function Login() {
       localStorage.setItem('token', res.access_token)
       localStorage.setItem('username', res.username)
       localStorage.setItem('role', res.role)
-      // Enriched RBAC fields (Phase 0003+)
-      localStorage.setItem('user_type',    res.user_type ?? 'EMPLOYEE')
-      localStorage.setItem('roles',        JSON.stringify(res.roles ?? []))
-      localStorage.setItem('permissions',  JSON.stringify(res.permissions ?? []))
       navigate('/')
     } catch (err: any) {
       setError(err.response?.data?.detail ?? 'Login failed')

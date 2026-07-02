@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import { isAuthenticated, fetchMe } from '../api/client'
-import { clearAuthStorage } from '../lib/auth'
 
 /**
  * Guards all authenticated routes.
@@ -24,8 +23,10 @@ export default function ProtectedRoute() {
     fetchMe()
       .then(() => setValid(true))
       .catch(() => {
-        // Token rejected by Kong or FastAPI — clear all stale auth state
-        clearAuthStorage()
+        // Token rejected by Kong or FastAPI — clear stale state
+        localStorage.removeItem('token')
+        localStorage.removeItem('username')
+        localStorage.removeItem('role')
         setValid(false)
       })
       .finally(() => setChecking(false))

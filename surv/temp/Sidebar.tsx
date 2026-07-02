@@ -1,25 +1,20 @@
 import { NavLink } from 'react-router-dom'
-import {
-  Video, PlaySquare, Bell, Camera, Activity, LogOut,
-  Building2, Users, ShieldCheck, ClipboardList, Layers, UserCog,
-} from 'lucide-react'
+import { Video, PlaySquare, Bell, Camera, Activity, LogOut } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
   fetchCameras,
   fetchActiveMotion,
-  callLogout,
+  logout,
   type Camera as CameraType,
   type MotionEvent,
 } from '../api/client'
-import { hasPermission, hasRole, getRoles, getUserType } from '../lib/auth'
 
-type NavItem = {
-  to: string
-  icon: React.ElementType
-  label: string
-  badge?: number
-  show?: boolean
-}
+const NAV = [
+  { to: '/',         icon: Video,      label: 'Live View'     },
+  { to: '/playback', icon: PlaySquare, label: 'Playback'      },
+  { to: '/motion',   icon: Bell,       label: 'Motion Alerts' },
+  { to: '/cameras',  icon: Camera,     label: 'Cameras'       },
+]
 
 export default function Sidebar() {
   const { data: cameras      = [] } = usePolling<CameraType[]>(['cameras'],      fetchCameras,      20_000)
@@ -27,26 +22,8 @@ export default function Sidebar() {
 
   const onlineCount  = cameras.filter(c => c.is_online).length
   const offlineCount = cameras.length - onlineCount
-  const username  = localStorage.getItem('username') ?? 'user'
-  const userType  = getUserType()
-  const roles     = getRoles()
-  const isAdmin   = hasRole('SUPER_ADMIN')
-
-  const NAV: NavItem[] = [
-    // ── Always visible ────────────────────────────────────
-    { to: '/',         icon: Video,          label: 'Live View',      show: true },
-    { to: '/playback', icon: PlaySquare,     label: 'Playback',       show: true },
-    { to: '/motion',   icon: Bell,           label: 'Motion Alerts',  badge: activeMotion.length, show: true },
-    { to: '/cameras',  icon: Camera,         label: 'Cameras',        show: true },
-    // ── Camera Groups — visible to anyone with camera.view ─
-    { to: '/camera-groups', icon: Layers,    label: 'Camera Groups',  show: hasPermission('camera.view') || isAdmin },
-    // ── Admin / manager pages ─────────────────────────────
-    { to: '/org',      icon: Building2,      label: 'Organizations',  show: hasPermission('system.settings') || isAdmin },
-    { to: '/customers',icon: UserCog,        label: 'Customers',      show: true },
-    { to: '/users',    icon: Users,          label: 'Users',          show: hasPermission('user.view') || isAdmin },
-    { to: '/roles',    icon: ShieldCheck,    label: 'Roles & Perms',  show: hasPermission('system.settings') || isAdmin },
-    { to: '/audit',    icon: ClipboardList,  label: 'Audit Log',      show: hasPermission('system.audit') || isAdmin },
-  ]
+  const username = localStorage.getItem('username') ?? 'user'
+  const role     = localStorage.getItem('role') ?? 'operator'
 
   return (
     <aside className="flex flex-col w-56 h-screen bg-panel border-r border-border shrink-0">
@@ -82,7 +59,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {NAV.filter(n => n.show !== false).map(({ to, icon: Icon, label, badge }) => (
+        {NAV.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
@@ -98,22 +75,22 @@ export default function Sidebar() {
           >
             <Icon size={15} />
             <span>{label}</span>
-            {badge != null && badge > 0 && (
+            {label === 'Motion Alerts' && activeMotion.length > 0 && (
               <span className="ml-auto bg-alert text-white font-mono text-[10px]
                                px-1.5 py-0.5 rounded-full leading-none">
-                {badge}
+                {activeMotion.length}
               </span>
             )}
           </NavLink>
         ))}
       </nav>
 
-      {/* Camera quick-list */}
+      {/* Camera list */}
       <div className="border-t border-border px-2 py-3">
         <p className="px-3 font-mono text-[10px] text-muted uppercase tracking-widest mb-2">
           Cameras
         </p>
-        <div className="space-y-0.5 max-h-32 overflow-y-auto">
+        <div className="space-y-0.5 max-h-40 overflow-y-auto">
           {cameras.map(cam => (
             <NavLink
               key={cam.cam_id}
@@ -142,17 +119,10 @@ export default function Sidebar() {
       <div className="border-t border-border px-4 py-3 flex items-center justify-between">
         <div className="min-w-0">
           <p className="text-xs text-slate-300 truncate">{username}</p>
-          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-            <span className="font-mono text-[9px] text-muted uppercase">{userType}</span>
-            {roles.slice(0, 2).map(r => (
-              <span key={r} className="font-mono text-[8px] bg-accent/10 text-accent px-1 rounded leading-tight">
-                {r.replace('_', ' ')}
-              </span>
-            ))}
-          </div>
+          <p className="font-mono text-[9px] text-muted uppercase">{role}</p>
         </div>
         <button
-          onClick={() => callLogout()}
+          onClick={logout}
           title="Log out"
           className="p-1.5 text-muted hover:text-alert hover:bg-border rounded transition-colors"
         >

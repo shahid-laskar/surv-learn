@@ -74,8 +74,6 @@ async def create_org(
         code=payload.code,
         name=payload.name,
         type=payload.type,
-        circle_id=payload.circle_id,
-        ba_id=payload.ba_id,
     )
     db.add(org)
     await db.flush()   # get org.id assigned
