@@ -8,7 +8,7 @@ from app.models.camera import Camera
 from app.services.mediamtx_service import is_path_ready
 from app.services.minio_service import get_presigned_url
 from app.services.auth_service import create_stream_token
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import require_permission, CurrentUser
 from app.schemas.auth import StreamTokenResponse
 from app.config import settings
 
@@ -19,14 +19,14 @@ router = APIRouter(prefix="/streams", tags=["streams"])
 async def get_hls_url(
     cam_id: str,
     db: AsyncSession = Depends(get_db),
-    current: CurrentUser = Depends(get_current_user),
+    current: CurrentUser = Depends(require_permission("camera.live")),
 ):
     result = await db.execute(select(Camera).where(Camera.cam_id == cam_id))
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
 
-    ready = await is_path_ready(cam_id)
+    await is_path_ready(cam_id)
     token = create_stream_token(cam_id, current.username, expires_in=3600)
 
     return StreamTokenResponse(
@@ -41,7 +41,7 @@ async def get_hls_url(
 async def get_webrtc_url(
     cam_id: str,
     db: AsyncSession = Depends(get_db),
-    current: CurrentUser = Depends(get_current_user),
+    current: CurrentUser = Depends(require_permission("camera.live")),
 ):
     result = await db.execute(select(Camera).where(Camera.cam_id == cam_id))
     cam = result.scalar_one_or_none()
@@ -59,7 +59,7 @@ async def get_webrtc_url(
 async def get_snapshot_url(
     cam_id: str,
     db: AsyncSession = Depends(get_db),
-    current: CurrentUser = Depends(get_current_user),
+    current: CurrentUser = Depends(require_permission("camera.view")),
 ):
     result = await db.execute(select(Camera).where(Camera.cam_id == cam_id))
     cam = result.scalar_one_or_none()

@@ -130,24 +130,7 @@ services:
       kong:
         condition: service_healthy
 
-  konga:
-    image: pantsel/konga:latest
-    container_name: surv_konga
-    restart: unless-stopped
-    networks:
-      - surv_net
-    ports:
-      - "1337:1337"
-    environment:
-      DB_ADAPTER: postgres
-      DB_HOST:    postgres
-      DB_USER:    ${POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_DATABASE: konga
-      NODE_ENV:   production
-    depends_on:
-      kong:
-        condition: service_healthy
+  
 
   kafka:
     image: apache/kafka:3.7.0

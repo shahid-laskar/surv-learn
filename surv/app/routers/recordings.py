@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.camera import Camera, VideoSegment
 from app.services.minio_service import get_presigned_url
 from app.schemas.recording import TimelineOut, SegmentOut
-from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.auth import require_permission, CurrentUser
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/recordings", tags=["recordings"])
@@ -20,7 +20,7 @@ async def get_timeline(
     cam_id: str,
     date:   str = Query(..., example="2026-06-27", description="YYYY-MM-DD"),
     db:     AsyncSession = Depends(get_db),
-    _user:  CurrentUser = Depends(get_current_user),
+    user:   CurrentUser = Depends(require_permission("camera.playback")),
 ):
     cam_result = await db.execute(select(Camera).where(Camera.cam_id == cam_id))
     cam = cam_result.scalar_one_or_none()
@@ -72,7 +72,7 @@ async def get_download_url(
     cam_id:     str,
     object_key: str = Query(..., description="MinIO object key of the segment"),
     db:         AsyncSession = Depends(get_db),
-    _user:      CurrentUser = Depends(get_current_user),
+    user:       CurrentUser = Depends(require_permission("camera.download")),
 ):
     cam_result = await db.execute(select(Camera).where(Camera.cam_id == cam_id))
     cam = cam_result.scalar_one_or_none()

@@ -262,6 +262,19 @@ docker compose exec postgres psql -U surv -d sarvanetra -c "
 INSERT INTO survapp_user (username, password_hash, role, is_active)
 VALUES ('admin', '\$2b\$12\$4PiYtdRs5gssEaluoV7Luedi3lhGbf5BCCSl9ZYZAYqHCZ8aVXAQa.', 'admin', true);
 "
+docker compose run -d --name tmp_migrate app sleep 60
+docker cp app/alembic/versions/0002_add_users.py \
+  tmp_migrate:/code/app/alembic/versions/0002_add_users.py
+docker cp app/alembic/versions/0003_company_hierarchy.py \
+  tmp_migrate:/code/app/alembic/versions/0003_company_hierarchy.py
+docker cp app/alembic/versions/0004_bsnl_masters.py \
+  tmp_migrate:/code/app/alembic/versions/0004_bsnl_masters.py
+docker exec tmp_migrate alembic upgrade head
+docker rm -f tmp_migrate
 
-
-
+docker compose exec mediamtx sh -c 'rm -rf /recordings/*'
+docker container prune -f
+docker image prune -a -f
+docker volume prune -f
+docker builder prune -a -f
+docker compose exec mediamtx df -h
