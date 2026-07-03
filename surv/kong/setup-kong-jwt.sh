@@ -122,7 +122,8 @@ curl -s -X POST "$KONG_ADMIN/services/surv-api/plugins" \
 echo "Enabling CORS plugin on surv-api service..."
 curl -s -X POST "$KONG_ADMIN/services/surv-api/plugins" \
   -d "name=cors" \
-  -d "config.origins=*" \
+  -d "config.origins=https://sarvanetra.bsnl.co.in" \
+  -d "config.origins=http://10.44.0.209:3000" \
   -d "config.methods[]=GET" \
   -d "config.methods[]=POST" \
   -d "config.methods[]=PUT" \
@@ -136,9 +137,19 @@ curl -s -X POST "$KONG_ADMIN/services/surv-api/plugins" \
   -d "config.headers[]=Origin" \
   -d "config.headers[]=X-Requested-With" \
   -d "config.exposed_headers[]=Authorization" \
-  -d "config.credentials=false" \
+  -d "config.credentials=true" \
   -d "config.max_age=3600" \
   -d "config.preflight_continue=false" \
   > /dev/null || true
+
+# ── 7. TLS Certificate (BSNL) ────────────────────────────────────────────────
+if [ -f "/certs/star_bsnl_co_in.crt" ] && [ -f "/certs/star_bsnl_co_in.key" ]; then
+  echo "Uploading BSNL wildcard TLS certificate..."
+  curl -s -X POST "$KONG_ADMIN/certificates" \
+    -F "cert=@/certs/star_bsnl_co_in.crt" \
+    -F "key=@/certs/star_bsnl_co_in.key" \
+    -F "snis[]=sarvanetra.bsnl.co.in" \
+    > /dev/null || true
+fi
 
 echo "Kong configuration complete."

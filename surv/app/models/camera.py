@@ -37,12 +37,15 @@ class Camera(Base):
     camera_model   = Column(String(100), nullable=True)
     manufacturer   = Column(String(100), nullable=True)
 
-    # ── Status ─────────────────────────────────────────────────────
-    is_active     = Column(Boolean, default=True,  nullable=False)
-    is_online     = Column(Boolean, default=False, nullable=False)
-    motion_active = Column(Boolean, default=True,  nullable=False)
-    last_seen     = Column(DateTime(timezone=True), nullable=True)
-    created_at    = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    # ── Status ─────────────────────────────────────────────────────────────
+    is_active      = Column(Boolean, default=True,  nullable=False)
+    is_online      = Column(Boolean, default=False, nullable=False)
+    motion_active  = Column(Boolean, default=True,  nullable=False)
+    last_seen      = Column(DateTime(timezone=True), nullable=True)
+    created_at     = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # ── Retention ──────────────────────────────────────────────────────────
+    retention_days = Column(Integer, nullable=True)  # NULL → use global RETENTION_DAYS env
 
     # ── Relationships ─────────────────────────────────────────────
     organization  = relationship("Organization", back_populates="cameras",      lazy="select")
@@ -50,8 +53,11 @@ class Camera(Base):
     customer_site = relationship("CustomerSite", back_populates="cameras",      lazy="select")
     circle        = relationship("CircleMaster", back_populates="cameras",      lazy="select")
     ba            = relationship("BAMaster",     back_populates="cameras",      lazy="select")
-    motion_events = relationship("MotionEvent",  back_populates="camera",       lazy="select")
-    video_segments = relationship("VideoSegment", back_populates="camera",      lazy="select")
+    motion_events = relationship("MotionEvent",    back_populates="camera",  lazy="select")
+    video_segments = relationship("VideoSegment",  back_populates="camera",  lazy="select")
+    status_logs    = relationship("CameraStatusLog", back_populates="camera", lazy="select",
+                                  order_by="CameraStatusLog.changed_at.desc()",
+                                  cascade="all, delete-orphan")
 
 
 class MotionEvent(Base):
@@ -89,4 +95,26 @@ class VideoSegment(Base):
 
     __table_args__ = (
         Index("ix_video_segment_camera_start", "camera_id", "segment_start"),
+    )
+
+
+class CameraStatusLog(Base):
+    """Immutable log of every online/offline transition per camera.
+
+    `duration_seconds` is NULL until the *next* transition fires —
+    at which point the status_monitor back-fills it so we know how long
+    the camera was in each state.
+    """
+    __tablename__ = "camera_status_log"
+
+    id               = Column(BigInteger, primary_key=True, index=True)
+    camera_id        = Column(Integer, ForeignKey("survapp_camera_master.id", ondelete="CASCADE"), nullable=False, index=True)
+    status           = Column(String(20), nullable=False)           # 'online' | 'offline'
+    changed_at       = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    duration_seconds = Column(Integer, nullable=True)               # back-filled on next transition
+
+    camera = relationship("Camera", back_populates="status_logs")
+
+    __table_args__ = (
+        Index("ix_camera_status_log_camera_changed", "camera_id", "changed_at"),
     )

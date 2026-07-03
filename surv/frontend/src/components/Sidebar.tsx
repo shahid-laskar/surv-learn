@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  Video, PlaySquare, Bell, Camera, Activity, LogOut,
+  Video, PlaySquare, Bell, Camera, Activity, LogOut, HeartPulse,
   Building2, Users, ShieldCheck, ClipboardList, Layers, UserCog,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
@@ -38,6 +38,7 @@ export default function Sidebar() {
     { to: '/playback', icon: PlaySquare,     label: 'Playback',       show: true },
     { to: '/motion',   icon: Bell,           label: 'Motion Alerts',  badge: activeMotion.length, show: true },
     { to: '/cameras',  icon: Camera,         label: 'Cameras',        show: true },
+    { to: '/health',   icon: HeartPulse,     label: 'Health',         badge: offlineCount > 0 ? offlineCount : undefined, show: hasPermission('system.settings') || isAdmin },
     // ── Camera Groups — visible to anyone with camera.view ─
     { to: '/camera-groups', icon: Layers,    label: 'Camera Groups',  show: hasPermission('camera.view') || isAdmin },
     // ── Admin / manager pages ─────────────────────────────

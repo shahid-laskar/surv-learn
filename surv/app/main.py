@@ -9,6 +9,7 @@ from app.routers import (
     organizations, customers, roles, audit, camera_groups,
     bsnl,
 )
+from app.config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,9 +35,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tightened in Phase 11
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_allowed_origins.split(","),
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=True,
 )
 
 # ── Core surveillance endpoints ────────────────────────────────────────────────

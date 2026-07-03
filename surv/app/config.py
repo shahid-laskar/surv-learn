@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480  # 8 hours
 
+    cors_allowed_origins: str = "http://10.44.0.209:3000,https://sarvanetra.bsnl.co.in"
+    alert_webhook_url: str | None = None
+    firebase_service_account_json: str | None = None
+
     debug: bool = False
 
     class Config:

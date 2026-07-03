@@ -122,6 +122,7 @@ services:
       - surv_net
     volumes:
       - ./kong/setup-kong-jwt.sh:/setup-kong-jwt.sh:ro
+      - ./certs:/certs:ro
     entrypoint: ["/bin/sh", "/setup-kong-jwt.sh"]
     environment:
       KONG_JWT_ISSUER: ${KONG_JWT_ISSUER}
@@ -303,7 +304,10 @@ services:
     networks:
       - surv_net
     ports:
-      - "3000:80"
+      - "3000:8080"
+      - "3443:8443"
+    volumes:
+      - ./certs:/certs:ro
     depends_on:
       - app
       - nginx_hls
@@ -444,6 +448,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:      surv_kafka:9092
       MEDIAMTX_API_URL:             http://mediamtx:9997
       STATUS_PING_INTERVAL_SECONDS: "30"
+      ALERT_WEBHOOK_URL:            ${ALERT_WEBHOOK_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -451,6 +456,29 @@ services:
         condition: service_healthy
       mediamtx:
         condition: service_started
+
+  minio_cleaner:
+    build:
+      context:    .
+      dockerfile: Dockerfile.worker
+    container_name: surv_minio_cleaner
+    restart: unless-stopped
+    networks:
+      - surv_net
+    command: python minio_cleaner.py
+    environment:
+      DATABASE_URL:                 ${DATABASE_URL}
+      MINIO_ENDPOINT:               minio:9000
+      MINIO_ROOT_USER:              ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD:          ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET_RECORDINGS:      ${MINIO_BUCKET_RECORDINGS:-recordings}
+      RETENTION_DAYS:               ${RETENTION_DAYS:-30}
+      CLEANER_RUN_INTERVAL_HOURS:   "6"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   snapshotter:
     build:
@@ -467,10 +495,30 @@ services:
       MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_SNAPSHOTS:    snapshots
       MEDIAMTX_RTSP_URL:         rtsp://mediamtx:8554
-      CAMERA_PATHS:              ${CAMERA_PATHS:-CAMKRTVM00001}
+      CAMERA_PATHS:              ${CAMERA_PATHS:-CAMKRTVM0001}
       SNAPSHOT_INTERVAL_SECONDS: "30"
     depends_on:
       minio:
         condition: service_healthy
       minio_init:
         condition: service_completed_successfully
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRIVATE DNS SERVER (For LAN Testing)
+# ─────────────────────────────────────────────────────────────────────────────
+  dnsmasq:
+    image: alpine:latest
+    container_name: surv_dnsmasq
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    networks:
+      - surv_net
+    command: >
+      /bin/sh -c "apk add --no-cache dnsmasq && 
+      dnsmasq -k --log-facility=- --address=/sarvanetra.bsnl.co.in/$${HOST_LAN_IP}"
+    environment:
+      - HOST_LAN_IP=${HOST_LAN_IP:-192.168.1.100}

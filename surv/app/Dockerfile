@@ -13,6 +13,9 @@ COPY app/ /code/app/
 
 ENV PYTHONPATH=/code
 
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /code
+USER appuser
+
 WORKDIR /code/app
 
 EXPOSE 8000

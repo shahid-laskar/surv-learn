@@ -21,7 +21,7 @@ BUCKET_SNAPSHOTS     = os.getenv("MINIO_BUCKET_SNAPSHOTS",  "snapshots")
 MEDIAMTX_RTSP        = os.getenv("MEDIAMTX_RTSP_URL",       "rtsp://mediamtx:8554")
 SNAPSHOT_INTERVAL    = int(os.getenv("SNAPSHOT_INTERVAL_SECONDS", "30"))
 CAMERA_PATHS         = [c.strip() for c in
-                        os.getenv("CAMERA_PATHS", "CAMKRTVM00001").split(",")]
+                        os.getenv("CAMERA_PATHS", "CAMKRTVM0001").split(",")]
 
 
 def capture_snapshot(camera_path: str) -> bytes | None:

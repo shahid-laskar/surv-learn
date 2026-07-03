@@ -11,3 +11,6 @@ COPY workers/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY workers/ .
+
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser

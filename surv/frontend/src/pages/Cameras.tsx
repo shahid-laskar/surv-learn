@@ -9,7 +9,7 @@ const EMPTY: CameraCreate = {
   cam_id: '', cam_name: '', cam_ip: '',
   cam_port: 554, onvif_port: 80,
   onvif_username: 'admin', onvif_password: 'admin',
-  motion_active: true,
+  motion_active: true, retention_days: 30,
 }
 
 const FIELDS: {
@@ -24,6 +24,7 @@ const FIELDS: {
   { label: 'RTSP URL',   field: 'rtsp_url',       type: 'text',     placeholder: 'rtsp://... (optional)' },
   { label: 'Username',   field: 'onvif_username', type: 'text',     placeholder: 'admin' },
   { label: 'Password',   field: 'onvif_password', type: 'password', placeholder: '••••••' },
+  { label: 'Retention Days', field: 'retention_days', type: 'number', placeholder: '30' },
 ]
 
 export default function Cameras() {

@@ -19,6 +19,7 @@ class CameraCreate(BaseModel):
     camera_model:   Optional[str] = None
     manufacturer:   Optional[str] = None
     motion_active:  bool = True
+    retention_days: Optional[int] = None
 
 class CameraUpdate(BaseModel):
     cam_name:       Optional[str] = None
@@ -37,6 +38,7 @@ class CameraUpdate(BaseModel):
     manufacturer:   Optional[str] = None
     motion_active:  Optional[bool] = None
     is_active:      Optional[bool] = None
+    retention_days: Optional[int] = None
 
 class CameraOut(BaseModel):
     id:           int
@@ -53,6 +55,7 @@ class CameraOut(BaseModel):
     is_active:    bool
     is_online:    bool
     motion_active: bool
+    retention_days: Optional[int]
     last_seen:    Optional[datetime]
     created_at:   datetime
 

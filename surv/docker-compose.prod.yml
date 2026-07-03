@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Close internal ports to the host
+  postgres:
+    ports: []
+  
+  kong-db-init:
+    ports: []
+
+  kafka:
+    ports: []
+
+  minio:
+    ports:
+      # Only expose the console port if needed, or close it entirely
+      - "9001:9001"
+
+  mediamtx:
+    # Only expose what is needed for streaming externally
+    ports:
+      - "${MEDIAMTX_RTSP_PORT:-8554}:8554"
+      - "${MEDIAMTX_HLS_PORT:-8888}:8888"
+      - "${MEDIAMTX_WEBRTC_PORT:-8889}:8889"
+      - "8189:8189/udp"
+
+  frontend:
+    # Scale up if necessary
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+
+  app:
+    # Scale up FastApi
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+
+  kong:
+    # Only expose HTTPS to the world
+    ports:
+      - "${KONG_PROXY_SSL_PORT:-8443}:8443"
+      # Expose admin ONLY on localhost (or remove mapping completely to require entering the container)
+      - "127.0.0.1:${KONG_ADMIN_PORT:-8001}:8001"

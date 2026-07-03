@@ -52,6 +52,7 @@ export interface Camera {
   motion_active: boolean
   last_seen:     string | null
   created_at:    string
+  retention_days: number | null
   organization_id?: number | null
   customer_id?: number | null
 }
@@ -66,6 +67,7 @@ export interface CameraCreate {
   onvif_username?: string
   onvif_password?: string
   motion_active?: boolean
+  retention_days?: number
   organization_id?: number
   customer_id?:     number
 }
@@ -99,6 +101,53 @@ export interface StreamTokenResponse {
   hls_url:    string
   token:      string
   expires_at: string
+}
+
+// ── Health & Status types ──────────────────────────────────
+
+export interface CameraHealth {
+  camera_id:       string
+  name:            string | null
+  is_online:       boolean
+  last_seen:       string | null
+  offline_minutes: number | null
+  uptime_pct_24h:  number | null
+}
+
+export interface StatusLogEntry {
+  id:               number
+  status:           string
+  changed_at:       string
+  duration_seconds: number | null
+}
+
+export interface StorageBucketStats {
+  bucket:        string
+  total_size_gb: number
+  object_count:  number
+  oldest_object: string | null
+}
+
+export interface StorageStats {
+  buckets:           StorageBucketStats[]
+  recordings_dir_gb: number | null
+  checked_at:        string
+}
+
+export interface WorkerHealthOut {
+  kafka:    string
+  minio:    string
+  mediamtx: string
+  postgres: string
+}
+
+export interface HealthSummary {
+  total_cameras:    number
+  online_cameras:   number
+  offline_cameras:  number
+  active_motion:    number
+  worker_health:    WorkerHealthOut
+  checked_at:       string
 }
 
 // ── Updated auth types (new RBAC fields) ──────────────────
@@ -401,8 +450,22 @@ export const fetchActiveMotion = () =>
 export const fetchTimeline  = (camId: string, date: string) =>
   api.get<Timeline>(`/recordings/${camId}/timeline`, { params: { date } }).then(r => r.data)
 
+// ── Health ─────────────────────────────────────────────────
+
 export const fetchServiceHealth = () =>
   api.get('/health/services').then(r => r.data)
+
+export const fetchHealthSummary = () =>
+  api.get<HealthSummary>('/health/summary').then(r => r.data)
+
+export const fetchCameraHealth = () =>
+  api.get<CameraHealth[]>('/health/cameras').then(r => r.data)
+
+export const fetchCameraHistory = (camId: string) =>
+  api.get<StatusLogEntry[]>(`/health/cameras/${camId}/history`).then(r => r.data)
+
+export const fetchStorageStats = () =>
+  api.get<StorageStats>('/health/storage').then(r => r.data)
 
 // ── Organizations ──────────────────────────────────────────
 

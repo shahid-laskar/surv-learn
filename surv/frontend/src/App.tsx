@@ -12,6 +12,7 @@ import Users            from './pages/Users'
 import Roles            from './pages/Roles'
 import AuditLog         from './pages/AuditLog'
 import CameraGroups     from './pages/CameraGroups'
+import Health           from './pages/Health'
 
 function AppShell() {
   return (
@@ -23,6 +24,7 @@ function AppShell() {
           <Route path="/playback"      element={<Playback />}     />
           <Route path="/motion"        element={<MotionEvents />} />
           <Route path="/cameras"       element={<Cameras />}      />
+          <Route path="/health"        element={<Health />}       />
           <Route path="/org"           element={<Organizations />} />
           <Route path="/customers"     element={<Customers />}    />
           <Route path="/users"         element={<Users />}        />
