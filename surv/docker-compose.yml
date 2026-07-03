@@ -319,6 +319,8 @@ services:
     restart: unless-stopped
     networks:
       - surv_net
+    ports:
+      - "8002:8000"
     # NOTE: port 8000 is intentionally NOT published to the host anymore.
     # Kong (also on :8000, but on the HOST) is now the only public entry
     # point — see Phase 7. FastAPI is reachable only inside the Docker
