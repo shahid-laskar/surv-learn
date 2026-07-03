@@ -256,11 +256,11 @@ docker compose up -d konga
 # 6. Create your first admin user directly in the DB (bootstrap — no UI exists yet for the very first user)
 docker compose exec app python3 -c "
 from app.services.auth_service import hash_password
-print(hash_password('Shahid1234'))
+print(hash_password('Shahid123'))
 "
 docker compose exec postgres psql -U surv -d sarvanetra -c "
 INSERT INTO survapp_user (username, password_hash, role, is_active)
-VALUES ('admin', '\$2b\$12\$4PiYtdRs5gssEaluoV7Luedi3lhGbf5BCCSl9ZYZAYqHCZ8aVXAQa.', 'admin', true);
+VALUES ('admin', '\$2b\$12\$aCrQjjA2gGjyRhLUDWqSqOiUOsguQeBTxfpIVR1/V2JjipThnlKzu', 'admin', true);
 "
 docker compose run -d --name tmp_migrate app sleep 60
 docker cp app/alembic/versions/0002_add_users.py \
@@ -278,3 +278,5 @@ docker image prune -a -f
 docker volume prune -f
 docker builder prune -a -f
 docker compose exec mediamtx df -h
+
+
