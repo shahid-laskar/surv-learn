@@ -9,6 +9,7 @@ from app.models.camera import Camera
 from app.schemas.camera import CameraCreate, CameraUpdate, CameraOut
 from app.dependencies.auth import get_current_user, require_admin, require_permission, CurrentUser
 from app.services.access_service import get_accessible_camera_ids
+from app.services.mediamtx_client import mediamtx_client
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/cameras", tags=["cameras"])
@@ -46,6 +47,10 @@ async def create_camera(
     db.add(cam)
     await db.commit()
     await db.refresh(cam)
+    
+    if cam.is_active:
+        await mediamtx_client.add_camera(cam)
+
     log.info(f"Camera registered: {cam.cam_id} ({cam.cam_ip}) by {user.username}")
     return cam
 
@@ -84,6 +89,12 @@ async def update_camera(
         setattr(cam, field, value)
     await db.commit()
     await db.refresh(cam)
+    
+    if cam.is_active:
+        await mediamtx_client.add_camera(cam)
+    else:
+        await mediamtx_client.remove_camera(cam.cam_id)
+        
     return cam
 
 
@@ -99,4 +110,7 @@ async def deactivate_camera(
         raise HTTPException(404, f"Camera '{cam_id}' not found")
     cam.is_active = False
     await db.commit()
-    log.info(f"Camera deactivated: {cam_id} by {user.username}")
+    
+    await mediamtx_client.remove_camera(cam_id)
+    
+    log.info(f"Camera {cam_id} deactivated by {user.username}")

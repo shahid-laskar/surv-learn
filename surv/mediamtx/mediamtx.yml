@@ -89,9 +89,9 @@ pathDefaults:
 #
 # To register a camera, POST to http://mediamtx:9997/v3/config/paths/add/{cam_id}
 # or use the onvif_producer service which does this automatically.
-paths:
+paths: {}
   # CAMKRTVM0001 — Matrix COMSEC IP Camera at 10.44.0.219
   # cam_id matches DB: survapp_camera_master.cam_id = 'CAMKRTVM0001'
-  CAMKRTVM0001:
-    source: rtsp://admin:admin@10.44.0.219:554/unicaststream/2
-    sourceProtocol: tcp
+  # CAMKRTVM0001:
+  #   source: rtsp://admin:admin@10.44.0.219:554/unicaststream/2
+  #   sourceProtocol: tcp

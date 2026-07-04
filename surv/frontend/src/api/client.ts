@@ -16,11 +16,15 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// On 401, clear stale token and bounce to login
+// On 401, clear stale token and bounce to login.
+// Exception: /auth/stream is called by MediaMTX to validate HLS tokens —
+// a 401 there does NOT mean the user's session is invalid.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url: string = error.config?.url ?? ''
+    const isStreamAuth = url.includes('/auth/stream')
+    if (error.response?.status === 401 && !isStreamAuth) {
       localStorage.removeItem('token')
       localStorage.removeItem('username')
       localStorage.removeItem('role')
@@ -34,6 +38,7 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
 
 // ── Existing types ─────────────────────────────────────────
 

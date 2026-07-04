@@ -42,7 +42,9 @@ async def list_motion_events(
     if active is not None:
         q = q.where(MotionEvent.is_active == active)
     result = await db.execute(q)
-    return result.scalars().all()
+    events = result.scalars().all()
+    print(f"DEBUG motion events returned: {events}")
+    return events
 
 
 @router.get("/{event_id}", response_model=MotionEventOut)

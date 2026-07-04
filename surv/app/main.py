@@ -18,9 +18,24 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+from sqlalchemy import select
+from app.database import AsyncSessionLocal
+from app.models.camera import Camera
+from app.services.mediamtx_client import mediamtx_client
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Sarvanetra API starting up")
+    
+    try:
+        # Sync all active cameras with MediaMTX on startup
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Camera).where(Camera.is_active == True))
+            cameras = result.scalars().all()
+            await mediamtx_client.sync_cameras(cameras)
+    except Exception as e:
+        log.error(f"Failed to sync cameras with MediaMTX on startup: {e}")
+
     yield
     log.info("Sarvanetra API shutting down")
 

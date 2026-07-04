@@ -23,10 +23,14 @@ import psycopg2
 import psycopg2.extras
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s %(message)s"
 )
 log = logging.getLogger(__name__)
+# Quieten verbose libraries
+logging.getLogger("kafka").setLevel(logging.WARNING)
+logging.getLogger("zeep").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # Namespaces used in Matrix camera XML
 NS = {
@@ -77,25 +81,35 @@ def get_active_cameras(conn) -> list[dict]:
 
 def parse_state_from_message(msg) -> bool | None:
     """
-    Parse the State value from a Matrix COMSEC ONVIF message.
+    Parse the motion state from a Matrix COMSEC ONVIF message.
 
-    The camera sends:
-      <tt:Data>
-        <tt:SimpleItem Name="State" Value="true"/>
-      </tt:Data>
+    The camera sends multiple event types per pull; we only care about:
+      Rule='MotionInDefinedCells'  →  IsMotion='true'|'false'
 
-    We read directly from the raw lxml element since zeep
-    fails to deserialize the Topic field on this camera.
+    Other messages (RecordingJobToken/State, VideoSource/State) are ignored
+    so we don't generate false motion.ended events.
     """
     try:
-        elem = msg.Message._value_1   # lxml Element
+        elem  = msg.Message._value_1   # lxml Element
         items = elem.findall('.//tt:SimpleItem', NS)
-        for item in items:
-            if item.get('Name') == 'State':
-                return item.get('Value', '').lower() == 'true'
+
+        item_data = {item.get('Name'): item.get('Value') for item in items}
+        log.info(f"DEBUG raw items: {item_data}")
+
+        rule = item_data.get('Rule', '')
+
+        # Only handle motion-detection rules
+        if rule in ('MotionInDefinedCells', 'MotionDetection', 'Motion', 'CellMotionDetector'):
+            # Matrix COMSEC uses IsMotion; some cameras use State
+            for key in ('IsMotion', 'State'):
+                if key in item_data:
+                    return item_data[key].lower() == 'true'
+
+        # Not a motion message — skip
     except Exception as e:
         log.warning(f"Failed to parse State from message: {e}")
     return None
+
 
 
 def parse_topic_from_notification(msg) -> str:
@@ -196,8 +210,25 @@ class ONVIFCameraProducer:
                 self._process_message(msg)
 
     def _process_message(self, msg):
+        # ── Dump the raw XML so we can see what the camera actually sends ──
+        try:
+            from lxml import etree
+            raw_elem = msg.Message._value_1
+            raw_xml = etree.tostring(raw_elem, pretty_print=True).decode()
+            log.debug(f"[{self.cam_path}] RAW Message XML:\n{raw_xml}")
+        except Exception as dump_err:
+            log.debug(f"[{self.cam_path}] Could not dump raw XML: {dump_err}")
+
+        # ── Also dump the Topic field ──
+        try:
+            log.debug(f"[{self.cam_path}] Topic: {msg.Topic}")
+        except Exception:
+            pass
+
         state = parse_state_from_message(msg)
+        log.debug(f"[{self.cam_path}] Parsed state={state}")
         if state is None:
+            log.info(f"[{self.cam_path}] Ignoring message — no State key found")
             return  # not a State message — ignore
 
         topic      = parse_topic_from_notification(msg)
