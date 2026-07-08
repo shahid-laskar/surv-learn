@@ -47,6 +47,9 @@ class Camera(Base):
     # ── Retention ──────────────────────────────────────────────────────────
     retention_days = Column(Integer, nullable=True)  # NULL → use global RETENTION_DAYS env
 
+    # ── Edge NVR ───────────────────────────────────────────────────────────
+    nvr_node_id    = Column(Integer, ForeignKey("nvr_node.id"), nullable=True)
+
     # ── Relationships ─────────────────────────────────────────────
     organization  = relationship("Organization", back_populates="cameras",      lazy="select")
     customer      = relationship("Customer",     back_populates="cameras",      lazy="select")
@@ -58,6 +61,7 @@ class Camera(Base):
     status_logs    = relationship("CameraStatusLog", back_populates="camera", lazy="select",
                                   order_by="CameraStatusLog.changed_at.desc()",
                                   cascade="all, delete-orphan")
+    nvr_mapping    = relationship("NvrCameraMap", back_populates="camera", uselist=False, lazy="select")
 
 
 class MotionEvent(Base):

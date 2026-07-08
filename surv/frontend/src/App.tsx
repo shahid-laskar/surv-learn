@@ -13,6 +13,7 @@ import Roles            from './pages/Roles'
 import AuditLog         from './pages/AuditLog'
 import CameraGroups     from './pages/CameraGroups'
 import Health           from './pages/Health'
+import NvrFleet         from './pages/NvrFleet'
 
 function AppShell() {
   return (
@@ -31,6 +32,7 @@ function AppShell() {
           <Route path="/roles"         element={<Roles />}        />
           <Route path="/audit"         element={<AuditLog />}     />
           <Route path="/camera-groups" element={<CameraGroups />} />
+          <Route path="/fleet"         element={<NvrFleet />} />
           <Route path="*"              element={<Navigate to="/" replace />} />
         </Routes>
       </main>

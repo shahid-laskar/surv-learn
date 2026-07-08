@@ -5,3 +5,5 @@ snapshots/
 __pycache__/
 *.pyc
 *.log
+node_modules/
+*.sqlite3

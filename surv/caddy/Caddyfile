@@ -1,0 +1,4 @@
+surv.internal {
+    tls internal
+    reverse_proxy headscale:8080
+}

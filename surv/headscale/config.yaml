@@ -1,0 +1,18 @@
+server_url: https://${HEADSCALE_DOMAIN}
+listen_addr: 0.0.0.0:8080
+private_key_path: /var/lib/headscale/private.key
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+ip_prefixes:
+  - 100.64.0.0/10
+db_type: sqlite3
+db_path: /var/lib/headscale/db.sqlite
+derp:
+  server:
+    enabled: false
+  urls: []
+  paths:
+    - /etc/headscale/derp.yaml
+dns:
+  magic_dns: false
+  base_domain: sarvanetra.internal

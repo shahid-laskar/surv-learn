@@ -1,0 +1,54 @@
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: nvr-${SITE_CODE}
+    environment:
+      TS_AUTHKEY: ${ENROLLMENT_PREAUTH_KEY}
+      TS_EXTRA_ARGS: --login-server=https://${HEADSCALE_DOMAIN}
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ts_state:/var/lib/tailscale
+    restart: unless-stopped
+
+  mediamtx:
+    build: 
+      context: .
+      dockerfile: Dockerfile.mediamtx
+    volumes:
+      - ./mediamtx/mediamtx-edge.yml:/mediamtx.yml:ro
+      - recordings:/recordings
+      - hls:/var/hls
+    restart: unless-stopped
+
+  edge-agent:
+    build: 
+      context: ./edge-agent
+    environment:
+      SITE_CODE: ${SITE_CODE}
+      HUB_API_URL: http://100.64.0.1:8000/api/v1
+      LOCAL_DATABASE_URL: sqlite:////data/edge.db
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
+      BACKUP_TRIGGER: ${BACKUP_TRIGGER:-motion}
+      BACKUP_CLIP_SECONDS: ${BACKUP_CLIP_SECONDS:-15}
+    volumes:
+      - edge_data:/data
+      - recordings:/recordings
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+
+  local_cleaner:
+    build: 
+      context: ./workers
+      dockerfile: Dockerfile.worker
+    command: python local_retention.py
+    volumes:
+      - recordings:/recordings
+      - edge_data:/data
+    restart: unless-stopped
+
+volumes:
+  ts_state:
+  recordings:
+  hls:
+  edge_data:

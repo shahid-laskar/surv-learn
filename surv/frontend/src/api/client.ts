@@ -369,6 +369,29 @@ export interface AuditLog {
   created_at:  string
 }
 
+// ── Fleet (Edge NVR) types ─────────────────────────────────
+
+export interface NvrNode {
+  id:               number
+  site_code:        string
+  customer_site_id: number | null
+  overlay_ip:       string | null
+  wg_node_key:      string | null
+  hardware_label:   string | null
+  agent_version:    string | null
+  last_heartbeat:   string | null
+  disk_used_pct:    number | null
+  is_provisioned:   boolean
+  created_at:       string
+  camera_count:     number
+}
+
+export interface NvrProvisionRequest {
+  site_code:        string
+  customer_site_id: number
+  hardware_label?:  string
+}
+
 // ── Auth ───────────────────────────────────────────────────
 
 export const login = (username: string, password: string) =>
@@ -567,5 +590,19 @@ export const fetchAuditLogs = (params?: {
   limit?:       number
   offset?:      number
 }) => api.get<AuditLog[]>('/audit/', { params }).then(r => r.data)
+
+// ── Fleet (Edge NVR) ───────────────────────────────────────
+
+export const fetchFleetNodes = () =>
+  api.get<NvrNode[]>('/fleet/').then(r => r.data)
+
+export const provisionNvr = (payload: NvrProvisionRequest) =>
+  api.post<NvrNode>('/fleet/', payload).then(r => r.data)
+
+export const fetchNvrDetail = (siteCode: string) =>
+  api.get<NvrNode>(`/fleet/${siteCode}`).then(r => r.data)
+
+export const decommissionNvr = (siteCode: string) =>
+  api.delete(`/fleet/${siteCode}`)
 
 export default api

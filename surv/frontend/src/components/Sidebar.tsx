@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   Video, PlaySquare, Bell, Camera, Activity, LogOut, HeartPulse,
-  Building2, Users, ShieldCheck, ClipboardList, Layers, UserCog,
+  Building2, Users, ShieldCheck, ClipboardList, Layers, UserCog, Server,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
@@ -42,6 +42,7 @@ export default function Sidebar() {
     // ── Camera Groups — visible to anyone with camera.view ─
     { to: '/camera-groups', icon: Layers,    label: 'Camera Groups',  show: hasPermission('camera.view') || isAdmin },
     // ── Admin / manager pages ─────────────────────────────
+    { to: '/fleet',    icon: Server,         label: 'NVR Fleet',      show: hasRole('SUPER_ADMIN') || hasRole('INSTALLER') },
     { to: '/org',      icon: Building2,      label: 'Organizations',  show: hasPermission('system.settings') || isAdmin },
     { to: '/customers',icon: UserCog,        label: 'Customers',      show: true },
     { to: '/users',    icon: Users,          label: 'Users',          show: hasPermission('user.view') || isAdmin },

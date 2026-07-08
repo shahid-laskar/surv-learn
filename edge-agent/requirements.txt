@@ -1,0 +1,6 @@
+httpx
+sqlalchemy
+aiosqlite
+pydantic
+python-dotenv
+boto3

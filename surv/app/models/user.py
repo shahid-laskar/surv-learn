@@ -70,3 +70,5 @@ class User(Base):
     notifications     = relationship("Notification",     back_populates="user", lazy="select")
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user", lazy="select",
                                          cascade="all, delete-orphan")
+    mobile_devices = relationship("MobileDevice", back_populates="user", lazy="select",
+                                 cascade="all, delete-orphan")

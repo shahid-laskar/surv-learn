@@ -21,3 +21,5 @@ from app.models.rbac import (                                       # noqa: F401
     UserSession, DeviceToken,
     AuditLog, Notification, PasswordResetToken,
 )
+from app.models.nvr import NvrNode, NvrCameraMap, BackupClip        # noqa: F401
+
