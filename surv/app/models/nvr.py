@@ -20,6 +20,7 @@ class NvrNode(Base):
     last_heartbeat   = Column(DateTime(timezone=True), nullable=True)
     disk_used_pct    = Column(Numeric(5, 2), nullable=True)
     is_provisioned   = Column(Boolean, default=False, nullable=True)
+    site_enrollment_secret = Column(String(64), nullable=True)
     created_at       = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     site             = relationship("CustomerSite", backref="nvr_nodes", lazy="select")

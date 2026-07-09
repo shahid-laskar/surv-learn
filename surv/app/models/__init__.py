@@ -22,4 +22,5 @@ from app.models.rbac import (                                       # noqa: F401
     AuditLog, Notification, PasswordResetToken,
 )
 from app.models.nvr import NvrNode, NvrCameraMap, BackupClip        # noqa: F401
-
+from app.models.edge_segment import EdgeVideoSegment                 # noqa: F401
+from app.models.mobile import MobileDevice                           # noqa: F401

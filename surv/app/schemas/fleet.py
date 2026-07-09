@@ -13,7 +13,7 @@ class CameraConfigOut(BaseModel):
     onvif_password: Optional[str] = None
     motion_active: bool
     retention_days: Optional[int] = None
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -36,8 +36,8 @@ class NvrNodeOut(NvrNodeBase):
     disk_used_pct: Optional[float] = None
     is_provisioned: bool
     created_at: datetime
-    
     camera_count: Optional[int] = 0
+    site_token: Optional[str] = None  # only returned on provision
 
     model_config = {"from_attributes": True}
 
@@ -47,7 +47,8 @@ class HeartbeatIn(BaseModel):
     agent_version: str
     disk_used_pct: float
     uptime_seconds: Optional[int] = None
-    online_cameras: List[str]  # cam_ids
+    online_cameras: List[str]
+    overlay_ip: Optional[str] = None
 
 
 class FleetConfigOut(BaseModel):
@@ -61,3 +62,15 @@ class BackupClipIn(BaseModel):
     reason: str
     captured_at: datetime
     object_key: str
+
+
+class NvrCameraAssignIn(BaseModel):
+    cam_id: str
+
+
+class NvrCameraOut(BaseModel):
+    cam_id: str
+    cam_ip: str
+    is_online: bool
+
+    model_config = {"from_attributes": True}

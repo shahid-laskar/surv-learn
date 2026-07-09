@@ -1,0 +1,117 @@
+# Edge NVR site simulation — fake ffmpeg cameras + optional VPN profile.
+# Uses the portable edge-nvr stack from ../edge-nvr/
+#
+# Launch one site:
+#   docker compose -p edge_sim_site01 --env-file site-envs/site-01.env -f docker-compose.yml up -d --build
+
+name: edge-sim
+
+networks:
+  sim_net:
+    driver: bridge
+
+volumes:
+  ts_state:
+  recordings:
+  hls:
+  edge_data:
+
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: sim_${SITE_CODE}_mediamtx
+    volumes:
+      - ../edge-nvr/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - recordings:/recordings
+      - hls:/var/hls
+    networks:
+      - sim_net
+    ports:
+      - "${RTSP_PORT}:8554"
+      - "${HLS_PORT}:8888"
+      - "${MGMT_PORT}:9997"
+    restart: unless-stopped
+
+  edge-agent:
+    build:
+      context: ../edge-nvr/edge-agent
+    container_name: sim_${SITE_CODE}_agent
+    environment:
+      SITE_CODE: ${SITE_CODE}
+      SITE_TOKEN: ${SITE_TOKEN}
+      HUB_API_URL: ${HUB_API_URL}
+      MEDIAMTX_API_URL: http://mediamtx:9997
+      LOCAL_DATABASE_URL: sqlite:////data/edge.db
+      RECORDINGS_DIR: /recordings
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-false}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
+    volumes:
+      - edge_data:/data
+      - recordings:/recordings
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+
+  cam-01:
+    image: linuxserver/ffmpeg:latest
+    container_name: sim_${SITE_CODE}_cam01
+    volumes:
+      - ./clips:/clips:ro
+    entrypoint: >
+      /bin/sh -c "sleep 5 &&
+      ffmpeg -stream_loop -1 -re -i /clips/site-${SITE_NUM}.mp4
+      -c copy -f rtsp rtsp://mediamtx:8554/SIMCAM-${SITE_CODE}-01"
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+
+  cam-02:
+    image: linuxserver/ffmpeg:latest
+    container_name: sim_${SITE_CODE}_cam02
+    volumes:
+      - ./clips:/clips:ro
+    entrypoint: >
+      /bin/sh -c "sleep 7 &&
+      ffmpeg -stream_loop -1 -re -i /clips/site-${SITE_NUM}.mp4
+      -c copy -f rtsp rtsp://mediamtx:8554/SIMCAM-${SITE_CODE}-02"
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+
+  cam-03:
+    image: linuxserver/ffmpeg:latest
+    container_name: sim_${SITE_CODE}_cam03
+    volumes:
+      - ./clips:/clips:ro
+    entrypoint: >
+      /bin/sh -c "sleep 9 &&
+      ffmpeg -stream_loop -1 -re -i /clips/site-${SITE_NUM}.mp4
+      -c copy -f rtsp rtsp://mediamtx:8554/SIMCAM-${SITE_CODE}-03"
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+
+  tailscale:
+    profiles: ["vpn"]
+    image: tailscale/tailscale:latest
+    hostname: nvr-${SITE_CODE}
+    container_name: sim_${SITE_CODE}_tailscale
+    environment:
+      TS_AUTHKEY: ${ENROLLMENT_PREAUTH_KEY}
+      TS_EXTRA_ARGS: --login-server=https://${HEADSCALE_DOMAIN} --accept-routes
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ts_state:/var/lib/tailscale
+    networks:
+      - sim_net
+    restart: unless-stopped

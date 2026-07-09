@@ -10,5 +10,12 @@ class MotionEventOut(BaseModel):
     is_active:    bool
     created_at:   datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
+
+
+class EdgeMotionIn(BaseModel):
+    site_code: str
+    cam_id: str
+    motion_start: datetime
+    motion_end: Optional[datetime] = None
+    is_active: bool = True

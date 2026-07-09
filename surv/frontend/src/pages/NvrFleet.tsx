@@ -10,6 +10,7 @@ export default function NvrFleet() {
   const [newSiteCode, setNewSiteCode] = useState('')
   const [newCustomerSiteId, setNewCustomerSiteId] = useState('')
   const [newHardware, setNewHardware] = useState('')
+  const [provisionedToken, setProvisionedToken] = useState<string | null>(null)
 
   const { data: nodes = [], isLoading } = useQuery<NvrNode[]>({
     queryKey: ['fleet-nodes'],
@@ -19,12 +20,16 @@ export default function NvrFleet() {
 
   const provisionMutation = useMutation({
     mutationFn: provisionNvr,
-    onSuccess: () => {
+    onSuccess: (node) => {
       queryClient.invalidateQueries({ queryKey: ['fleet-nodes'] })
-      setShowAddModal(false)
-      setNewSiteCode('')
-      setNewCustomerSiteId('')
-      setNewHardware('')
+      if (node.site_token) {
+        setProvisionedToken(node.site_token)
+      } else {
+        setShowAddModal(false)
+        setNewSiteCode('')
+        setNewCustomerSiteId('')
+        setNewHardware('')
+      }
     },
   })
 
@@ -124,11 +129,10 @@ export default function NvrFleet() {
                 </div>
               </div>
 
-              {!node.is_provisioned && node.wg_node_key && (
+              {!node.is_provisioned && (
                 <div className="mt-4 p-3 bg-surface border border-border rounded text-sm">
-                  <p className="text-muted mb-2 text-xs uppercase tracking-wider font-semibold">Pre-Auth Key</p>
-                  <code className="text-[10px] break-all text-slate-400 select-all">{node.wg_node_key}</code>
-                  <p className="text-[10px] text-muted mt-2">Use this key to enroll the edge appliance.</p>
+                  <p className="text-muted mb-2 text-xs uppercase tracking-wider font-semibold">Enrollment</p>
+                  <p className="text-[10px] text-muted">Set SITE_CODE and SITE_TOKEN in edge-nvr/.env on the site appliance.</p>
                 </div>
               )}
             </div>
@@ -146,7 +150,30 @@ export default function NvrFleet() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-panel border border-border rounded-lg w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold text-slate-100 mb-4">Provision New NVR</h2>
+            <h2 className="text-lg font-semibold text-slate-100 mb-4">
+              {provisionedToken ? 'NVR Provisioned' : 'Provision New NVR'}
+            </h2>
+            {provisionedToken ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted">Copy into <code className="text-accent">edge-nvr/.env</code> on the site VM:</p>
+                <pre className="bg-surface border border-border rounded p-3 text-xs text-slate-300 overflow-x-auto select-all">
+{`SITE_CODE=${newSiteCode}\nSITE_TOKEN=${provisionedToken}\nHUB_API_URL=http://<hub-ip>:8000/api/v1`}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProvisionedToken(null)
+                    setShowAddModal(false)
+                    setNewSiteCode('')
+                    setNewCustomerSiteId('')
+                    setNewHardware('')
+                  }}
+                  className="bg-accent hover:bg-accent/90 text-white px-4 py-2 rounded text-sm font-medium w-full"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
             <form onSubmit={handleProvision} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">Site Code</label>
@@ -193,10 +220,11 @@ export default function NvrFleet() {
                   disabled={provisionMutation.isPending}
                   className="bg-accent hover:bg-accent/90 text-white px-4 py-2 rounded text-sm font-medium"
                 >
-                  {provisionMutation.isPending ? 'Provisioning...' : 'Generate Pre-Auth Key'}
+                  {provisionMutation.isPending ? 'Provisioning...' : 'Provision NVR'}
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

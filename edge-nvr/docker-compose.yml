@@ -1,0 +1,79 @@
+# Portable edge NVR stack — deploy on a separate VM at the customer site.
+# Talks to the Sarvanetra hub over LAN (HUB_API_URL) or VPN overlay (profile: vpn).
+#
+# Quick start (LAN test against hub at 10.44.0.209):
+#   cp .env.example .env   # set SITE_CODE, SITE_TOKEN, HUB_API_URL
+#   docker compose up -d --build
+
+name: edge-nvr
+
+networks:
+  edge_net:
+    driver: bridge
+
+volumes:
+  recordings:
+  hls:
+  edge_data:
+  ts_state:
+
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: edge_mediamtx
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - recordings:/recordings
+      - hls:/var/hls
+    ports:
+      - "${HLS_PORT:-8888}:8888"
+      - "${RTSP_PORT:-8554}:8554"
+      - "${MGMT_PORT:-9997}:9997"
+    networks:
+      - edge_net
+    restart: unless-stopped
+
+  edge-agent:
+    build:
+      context: ./edge-agent
+    container_name: edge_agent
+    environment:
+      SITE_CODE: ${SITE_CODE}
+      SITE_TOKEN: ${SITE_TOKEN}
+      HUB_API_URL: ${HUB_API_URL}
+      MEDIAMTX_API_URL: http://mediamtx:9997
+      LOCAL_DATABASE_URL: sqlite:////data/edge.db
+      RECORDINGS_DIR: /recordings
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
+      BACKUP_TRIGGER: ${BACKUP_TRIGGER:-motion}
+      BACKUP_CLIP_SECONDS: ${BACKUP_CLIP_SECONDS:-15}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
+      MINIO_BUCKET_BACKUP: ${MINIO_BUCKET_BACKUP:-backup_clips}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+    volumes:
+      - edge_data:/data
+      - recordings:/recordings
+    networks:
+      - edge_net
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+
+  # Optional — enable with: docker compose --profile vpn up -d
+  tailscale:
+    profiles: ["vpn"]
+    image: tailscale/tailscale:latest
+    hostname: nvr-${SITE_CODE}
+    container_name: edge_tailscale
+    environment:
+      TS_AUTHKEY: ${ENROLLMENT_PREAUTH_KEY}
+      TS_EXTRA_ARGS: --login-server=https://${HEADSCALE_DOMAIN} --accept-routes
+      TS_STATE_DIR: /var/lib/tailscale
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ts_state:/var/lib/tailscale
+    networks:
+      - edge_net
+    restart: unless-stopped

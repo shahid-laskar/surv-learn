@@ -96,6 +96,7 @@ def get_active_cameras(conn) -> list[dict]:
             FROM survapp_camera_master
             WHERE is_active = true
               AND motion_active = true
+              AND nvr_node_id IS NULL
         """)
         return [dict(row) for row in cur.fetchall()]
 

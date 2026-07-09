@@ -384,6 +384,7 @@ export interface NvrNode {
   is_provisioned:   boolean
   created_at:       string
   camera_count:     number
+  site_token?:      string | null
 }
 
 export interface NvrProvisionRequest {
@@ -604,5 +605,14 @@ export const fetchNvrDetail = (siteCode: string) =>
 
 export const decommissionNvr = (siteCode: string) =>
   api.delete(`/fleet/${siteCode}`)
+
+export const assignCameraToNvr = (siteCode: string, camId: string) =>
+  api.post(`/fleet/${siteCode}/cameras`, { cam_id: camId }).then(r => r.data)
+
+export const unassignCameraFromNvr = (siteCode: string, camId: string) =>
+  api.delete(`/fleet/${siteCode}/cameras/${camId}`)
+
+export const fetchNvrCameras = (siteCode: string) =>
+  api.get<{ cam_id: string; cam_ip: string; is_online: boolean }[]>(`/fleet/${siteCode}/cameras`).then(r => r.data)
 
 export default api

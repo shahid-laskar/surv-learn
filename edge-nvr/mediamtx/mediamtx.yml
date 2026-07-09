@@ -1,0 +1,55 @@
+# MediaMTX config for portable edge NVR appliances.
+# Pulls RTSP from LAN cameras; records locally; serves HLS on :8888.
+
+logLevel: info
+logDestinations: [stdout]
+
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: api
+      - action: publish
+      - action: read
+      - action: playback
+
+api: true
+apiAddress: :9997
+apiAllowOrigins: ["*"]
+
+rtsp: true
+rtspAddress: :8554
+rtspEncryption: "no"
+
+hls: true
+hlsAddress: :8888
+hlsEncryption: false
+hlsAllowOrigins: ["*"]
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+hlsDirectory: /var/hls
+
+webrtc: true
+webrtcAddress: :8889
+webrtcEncryption: false
+webrtcAllowOrigins: ["*"]
+
+rtmp: false
+
+pathDefaults:
+  sourceOnDemand: true
+  sourceOnDemandStartTimeout: 10s
+  sourceOnDemandCloseAfter: 30s
+  record: true
+  recordPath: /recordings/%path/%Y/%m/%d/%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 60s
+  recordDeleteAfter: 0s
+
+paths: {}

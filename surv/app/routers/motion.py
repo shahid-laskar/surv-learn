@@ -1,19 +1,29 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, update, func
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.database import get_db
-from app.models.camera import MotionEvent
-from app.schemas.motion import MotionEventOut
+from app.models.camera import MotionEvent, Camera
+from app.models.nvr import NvrNode, NvrCameraMap
+from app.schemas.motion import MotionEventOut, EdgeMotionIn
 from app.dependencies.auth import get_current_user, CurrentUser
+from app.dependencies.fleet_auth import verify_site_token
 from app.services.access_service import get_accessible_camera_ids, ensure_camera_accessible
 
 router = APIRouter(prefix="/motion", tags=["motion"])
 
 STALE_ACTIVE_SECONDS = int(os.getenv("MOTION_ACTIVE_STALE_SECONDS", "1800"))  # 30 minutes
+
+
+async def _verify_edge_site(
+    payload: EdgeMotionIn,
+    db: AsyncSession = Depends(get_db),
+    x_site_token: str | None = Header(None, alias="X-Site-Token"),
+) -> NvrNode:
+    return await verify_site_token(payload.site_code, db, x_site_token)
 
 
 async def close_stale_motion_events(db: AsyncSession) -> None:
@@ -99,3 +109,54 @@ async def get_motion_event(
         raise HTTPException(404, f"Motion event {event_id} not found")
     await ensure_camera_accessible(user, db, event.camera_id)
     return event
+
+
+@router.post("/edge", status_code=status.HTTP_201_CREATED)
+async def ingest_edge_motion(
+    payload: EdgeMotionIn,
+    db: AsyncSession = Depends(get_db),
+    node: NvrNode = Depends(_verify_edge_site),
+):
+    """Edge-agent pushes motion events (authenticated via X-Site-Token)."""
+    if node.site_code != payload.site_code:
+        raise HTTPException(status_code=403, detail="Site code mismatch")
+
+    camera = await db.scalar(
+        select(Camera)
+        .join(NvrCameraMap, NvrCameraMap.camera_id == Camera.id)
+        .where(NvrCameraMap.nvr_node_id == node.id)
+        .where(Camera.cam_id == payload.cam_id)
+    )
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not on this NVR")
+
+    if payload.is_active and not payload.motion_end:
+        event = MotionEvent(
+            camera_id=camera.id,
+            motion_start=payload.motion_start,
+            motion_end=None,
+            is_active=True,
+        )
+        db.add(event)
+    else:
+        # Close or record ended event
+        if payload.motion_end:
+            event = MotionEvent(
+                camera_id=camera.id,
+                motion_start=payload.motion_start,
+                motion_end=payload.motion_end,
+                is_active=False,
+            )
+            db.add(event)
+        else:
+            await db.execute(
+                update(MotionEvent)
+                .where(
+                    MotionEvent.camera_id == camera.id,
+                    MotionEvent.is_active == True,  # noqa: E712
+                )
+                .values(motion_end=payload.motion_start, is_active=False)
+            )
+
+    await db.commit()
+    return {"status": "ok"}
