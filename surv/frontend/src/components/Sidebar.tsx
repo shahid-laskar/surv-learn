@@ -13,6 +13,18 @@ import {
 } from '../api/client'
 import { hasPermission, hasRole, getRoles, getUserType } from '../lib/auth'
 
+// UI failsafe: if the backend misses a `motion_end`, avoid showing the same
+// alert as "active forever".
+const STALE_ACTIVE_MS = 30 * 60 * 1000 // 30 minutes
+
+function effectiveIsActive(e: MotionEvent): boolean {
+  if (!e.is_active) return false
+  if (e.motion_end) return e.is_active
+  const startMs = new Date(e.motion_start).getTime()
+  const ageMs = Date.now() - startMs
+  return ageMs < STALE_ACTIVE_MS
+}
+
 type NavItem = {
   to: string
   icon: React.ElementType
@@ -24,6 +36,7 @@ type NavItem = {
 export default function Sidebar() {
   const { data: cameras      = [] } = usePolling<CameraType[]>(['cameras'],      fetchCameras,      20_000)
   const { data: activeMotion = [] } = usePolling<MotionEvent[]>(['motion-active'], fetchActiveMotion, 10_000)
+  const activeMotionCount = activeMotion.filter(e => effectiveIsActive(e)).length
 
   const onlineCount  = cameras.filter(c => c.is_online).length
   const offlineCount = cameras.length - onlineCount
@@ -36,7 +49,7 @@ export default function Sidebar() {
     // ── Always visible ────────────────────────────────────
     { to: '/',         icon: Video,          label: 'Live View',      show: true },
     { to: '/playback', icon: PlaySquare,     label: 'Playback',       show: true },
-    { to: '/motion',   icon: Bell,           label: 'Motion Alerts',  badge: activeMotion.length, show: true },
+    { to: '/motion',   icon: Bell,           label: 'Motion Alerts',  badge: activeMotionCount, show: true },
     { to: '/cameras',  icon: Camera,         label: 'Cameras',        show: true },
     { to: '/health',   icon: HeartPulse,     label: 'Health',         badge: offlineCount > 0 ? offlineCount : undefined, show: hasPermission('system.settings') || isAdmin },
     // ── Camera Groups — visible to anyone with camera.view ─

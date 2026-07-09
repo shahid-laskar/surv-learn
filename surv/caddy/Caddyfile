@@ -1,4 +1,9 @@
-surv.internal {
-    tls internal
+{
+    # Disable automatic HTTPS via ACME — we provide our own cert
+    auto_https off
+}
+
+vpn.sarvanetra.bsnl.co.in:443 {
+    tls /certs/star_bsnl_co_in.crt /certs/star_bsnl_co_in.key
     reverse_proxy headscale:8080
 }

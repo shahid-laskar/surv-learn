@@ -1,3 +1,5 @@
+> **Superseded:** See [sarvanetra_final_implementation_plan.md](sarvanetra_final_implementation_plan.md) for the authoritative implementation plan. This document is retained as historical reference.
+
 # Sarvanetra — Distributed Edge NVR & Secure Remote Access
 ## Extension Plan: Phases 12–14
 *Building on the Phase 0–11 as-built platform and the multi-tenant backbone*

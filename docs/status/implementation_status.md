@@ -1,3 +1,5 @@
+> **Superseded:** See [sarvanetra_final_implementation_plan.md](sarvanetra_final_implementation_plan.md) for the authoritative implementation plan. This document is retained as historical reference.
+
 # Sarvanetra — As-Built Status & Completed Work
 ## Comprehensive Handoff Document (for continued planning)
 

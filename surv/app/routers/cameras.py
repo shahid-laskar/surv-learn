@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.camera import Camera
 from app.schemas.camera import CameraCreate, CameraUpdate, CameraOut
 from app.dependencies.auth import get_current_user, require_admin, require_permission, CurrentUser
-from app.services.access_service import get_accessible_camera_ids
+from app.services.access_service import get_accessible_camera_ids, ensure_camera_accessible
 from app.services.mediamtx_client import mediamtx_client
 
 log = logging.getLogger(__name__)
@@ -66,11 +66,7 @@ async def get_camera(
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
 
-    # Check scoped access
-    accessible_ids = await get_accessible_camera_ids(user, db)
-    if accessible_ids is not None and cam.id not in accessible_ids:
-        raise HTTPException(403, "Access to this camera is not permitted")
-
+    await ensure_camera_accessible(user, db, cam.id)
     return cam
 
 
@@ -85,6 +81,7 @@ async def update_camera(
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
+    await ensure_camera_accessible(user, db, cam.id)
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(cam, field, value)
     await db.commit()
@@ -108,6 +105,7 @@ async def deactivate_camera(
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
+    await ensure_camera_accessible(user, db, cam.id)
     cam.is_active = False
     await db.commit()
     

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 from datetime import datetime, timezone
 
 from app.database import get_db
@@ -10,6 +9,7 @@ from app.models.nvr import NvrNode
 from app.services.mediamtx_service import is_path_ready
 from app.services.minio_service import get_presigned_url
 from app.services.auth_service import create_stream_token
+from app.services.access_service import ensure_camera_accessible
 from app.dependencies.auth import require_permission, CurrentUser
 from app.schemas.auth import StreamTokenResponse
 from app.config import settings
@@ -30,6 +30,7 @@ async def get_hls_url(
         raise HTTPException(404, f"Camera '{cam_id}' not found")
         
     cam, nvr = row
+    await ensure_camera_accessible(current, db, cam.id)
 
     if not nvr:
         await is_path_ready(cam_id)
@@ -60,6 +61,7 @@ async def get_webrtc_url(
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
+    await ensure_camera_accessible(current, db, cam.id)
 
     token = create_stream_token(cam_id, current.username, expires_in=3600)
     return {
@@ -78,6 +80,7 @@ async def get_snapshot_url(
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
+    await ensure_camera_accessible(current, db, cam.id)
     try:
         url = get_presigned_url(
             object_key=f"{cam_id}/latest.jpg",

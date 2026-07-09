@@ -10,12 +10,19 @@ directly, container-to-container, on FastAPI's internal port.
 """
 
 import logging
+import time
 from fastapi import APIRouter, Request, Response
 from jose import JWTError
 from app.services.auth_service import decode_stream_token
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["stream-auth"])
+
+# HLS clients often send the JWT only on the initial playlist request.
+# Segment/part requests can arrive without the token query; allow those
+# requests when they come from the same MediaMTX client IP + path and the
+# original token has not expired yet.
+_stream_session_expiry: dict[tuple[str, str], int] = {}
 
 
 @router.post("/stream", status_code=200)
@@ -29,6 +36,7 @@ async def validate_stream_access(request: Request, response: Response):
     access to the requested path.
     """
     body = await request.json()
+    client_ip = body.get("ip", "")
     path  = body.get("path", "")
     query = body.get("query", "")
     action = body.get("action", "")
@@ -44,7 +52,19 @@ async def validate_stream_access(request: Request, response: Response):
             token = part[len("token="):]
             break
 
+    now = int(time.time())
+    key = (client_ip, path)
+
     if not token:
+        # Opportunistically clear stale session entries.
+        expired = [k for k, exp in _stream_session_expiry.items() if exp <= now]
+        for stale_key in expired:
+            _stream_session_expiry.pop(stale_key, None)
+
+        session_exp = _stream_session_expiry.get(key)
+        if session_exp and session_exp > now:
+            return {"status": "ok"}
+
         log.warning(f"Stream access denied — no token for path '{path}'")
         response.status_code = 401
         return {"status": "denied", "reason": "missing token"}
@@ -61,5 +81,9 @@ async def validate_stream_access(request: Request, response: Response):
         log.warning(f"Stream access denied — token scoped to '{token_path}', requested '{path}'")
         response.status_code = 403
         return {"status": "denied", "reason": "token not valid for this camera"}
+
+    token_exp = payload.get("exp")
+    if isinstance(token_exp, int):
+        _stream_session_expiry[key] = token_exp
 
     return {"status": "ok"}

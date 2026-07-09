@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -15,6 +15,7 @@ export default function Playback() {
 
   const { data: cameras = [] } = useQuery({ queryKey: ['cameras'], queryFn: fetchCameras })
   const selectedId = params.get('cam') ?? ''
+  const startHint  = params.get('start') ?? ''   // ISO timestamp from MotionEvents, optional
   const cam        = cameras.find(c => c.cam_id === selectedId) ?? cameras[0] ?? null
 
   useEffect(() => {
@@ -26,6 +27,47 @@ export default function Playback() {
     queryFn:  () => fetchTimeline(cam!.cam_id, date),
     enabled:  !!cam,
   })
+
+  // Sort segments by start time descending (latest first) so the most
+  // recent events are easiest to reach.
+  const sortedSegments: Segment[] = useMemo(() => {
+    if (!timeline?.segments) return []
+    return [...timeline.segments].sort(
+      (a, b) => new Date(b.start).getTime() - new Date(a.start).getTime(),
+    )
+  }, [timeline])
+
+  // When navigated from Motion Alerts with a ?start= hint and we have
+  // timeline data but no selected segment yet, auto-pick the segment
+  // whose time window covers (or is closest after) the hinted start.
+  useEffect(() => {
+    if (!sortedSegments.length || !startHint || seg) return
+    const target = new Date(startHint).getTime()
+    if (Number.isNaN(target)) return
+
+    let best: Segment | null = null
+    let bestScore = Number.POSITIVE_INFINITY
+
+    for (const s of sortedSegments) {
+      const startTs = new Date(s.start).getTime()
+      const endTs   = s.end ? new Date(s.end).getTime() : startTs
+      if (Number.isNaN(startTs) || Number.isNaN(endTs)) continue
+
+      // Prefer segments that actually contain the timestamp
+      if (startTs <= target && target <= endTs) {
+        best = s
+        break
+      }
+
+      const score = Math.abs(startTs - target)
+      if (score < bestScore) {
+        bestScore = score
+        best = s
+      }
+    }
+
+    if (best) setSeg(best)
+  }, [sortedSegments, startHint, seg])
 
   useEffect(() => {
     if (seg && videoRef.current) {
@@ -118,7 +160,7 @@ export default function Playback() {
               </div>
             </div>
             <Timeline
-              segments={timeline?.segments ?? []}
+              segments={sortedSegments}
               date={date}
               activeSegmentId={seg?.segment_id}
               onSeek={setSeg}
@@ -142,7 +184,7 @@ export default function Playback() {
                     </tr>
                   </thead>
                   <tbody>
-                    {timeline!.segments.map(s => (
+                    {sortedSegments.map(s => (
                       <tr key={s.segment_id}
                           onClick={() => setSeg(s)}
                           className={`border-b border-border/50 cursor-pointer transition-colors

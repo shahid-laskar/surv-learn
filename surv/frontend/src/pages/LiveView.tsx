@@ -8,15 +8,15 @@ import StatusBadge from '../components/StatusBadge'
 type GridN = 1 | 2 | 4
 
 function CameraCell({ cam, onExpand }: { cam: Camera; onExpand: () => void }) {
-  // Each camera now needs its own token-embedded URL, fetched from FastAPI
-  // through Kong rather than constructed client-side. Cached/refetched
-  // every 50 minutes since stream tokens expire after 1 hour (server-side).
-  const { data: streamInfo } = useQuery({
+  // Token expires after 1 hour server-side — refresh proactively at 45 min
+  // and on-demand when the player hits a 401.
+  const { data: streamInfo, refetch: refetchStream } = useQuery({
     queryKey: ['hls-url', cam.cam_id],
     queryFn:  () => fetchHlsUrl(cam.cam_id),
     enabled:  cam.is_online,
-    staleTime: 50 * 60 * 1000,
-    refetchInterval: 50 * 60 * 1000,
+    staleTime: 45 * 60 * 1000,
+    refetchInterval: 45 * 60 * 1000,
+    refetchOnReconnect: true,
   })
 
   return (
@@ -29,6 +29,7 @@ function CameraCell({ cam, onExpand }: { cam: Camera; onExpand: () => void }) {
           camId={cam.cam_id}
           isOnline={cam.is_online}
           className="absolute inset-0"
+          onNeedsRefresh={() => { refetchStream() }}
         />
       ) : (
         <HLSPlayer
@@ -68,7 +69,7 @@ export default function LiveView() {
   })
 
   const active = cameras.filter(c => c.is_active)
-  const shown  = expanded ? active.filter(c => c.cam_id === expanded) : active.slice(0, grid)
+  const shown  = expanded ? active.filter(c => c.cam_id === expanded) : active.slice(0, grid * grid)
 
   const cols: Record<GridN, string> = {
     1: 'grid-cols-1',

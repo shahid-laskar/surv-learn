@@ -133,8 +133,34 @@ async def heartbeat(
     node.last_heartbeat = datetime.now(timezone.utc)
     node.is_provisioned = True
     
-    # In a full implementation, we'd sync hb.online_cameras state with the DB here.
-    
+    # Sync camera online states
+    if node.id is not None:
+        from sqlalchemy import update
+        from app.models.camera import Camera
+        from app.models.nvr import NvrCameraMap
+        
+        now = datetime.now(timezone.utc)
+        
+        # Set online cameras
+        if hb.online_cameras:
+            await db.execute(
+                update(Camera)
+                .where(Camera.cam_id.in_(hb.online_cameras))
+                .where(Camera.id.in_(
+                    select(NvrCameraMap.camera_id).where(NvrCameraMap.nvr_node_id == node.id)
+                ))
+                .values(is_online=True, last_seen=now)
+            )
+        
+        # Set offline cameras
+        await db.execute(
+            update(Camera)
+            .where(~Camera.cam_id.in_(hb.online_cameras))
+            .where(Camera.id.in_(
+                select(NvrCameraMap.camera_id).where(NvrCameraMap.nvr_node_id == node.id)
+            ))
+            .values(is_online=False)
+        )
     await db.commit()
     return {"status": "ok"}
 
@@ -170,7 +196,7 @@ async def get_config(
         
     return FleetConfigOut(
         site_code=site_code,
-        kong_jwt_secret=settings.jwt_secret_key,  # Sent encrypted via WireGuard
+        kong_jwt_secret=settings.kong_jwt_secret,  # Sent encrypted via WireGuard
         cameras=cam_configs
     )
 

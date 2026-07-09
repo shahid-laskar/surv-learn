@@ -1,3 +1,5 @@
+> **Superseded:** See [sarvanetra_final_implementation_plan.md](sarvanetra_final_implementation_plan.md) for the authoritative implementation plan. This document is retained as historical reference.
+
 # Sarvanetra — Implementation Plan Part 2
 ## Commercial Rollout: Phases 12–19
 ### Edge NVR · Internet-Agnostic Cameras · 4G SIM Support · WireGuard Overlay · Mobile App · Billing · Go-Live

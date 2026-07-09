@@ -1,3 +1,5 @@
+> **Superseded:** See [sarvanetra_final_implementation_plan.md](sarvanetra_final_implementation_plan.md) for the authoritative implementation plan. This document is retained as historical reference.
+
 # Sarvanetra — Phase 15 (Revised): VPN Remote Access for Admin & Customers
 ## Non-BSNL-Site Connectivity & Remote Management, Without Waiting for the Mobile App
 

@@ -10,6 +10,11 @@ export function usePolling<T>(
     queryKey:       key,
     queryFn:        fn,
     refetchInterval: intervalMs,
+    // Make polling self-healing after temporary network failures.
+    // This prevents "stuck" UI like motion alerts staying active.
+    refetchOnReconnect:   true,
+    refetchOnWindowFocus: true,
+    retry:                3,
     ...options,
   })
 }

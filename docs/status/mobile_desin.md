@@ -1,3 +1,5 @@
+> **Superseded:** See [sarvanetra_final_implementation_plan.md](sarvanetra_final_implementation_plan.md) for the authoritative implementation plan (Phase G). This document is retained as the detailed mobile spec appendix.
+
 # Sarvanetra Mobile — Professional App Specification
 ## Embedded WireGuard Remote Access + Photo-Based Camera Onboarding
 *Expo / React Native, current (2026) industry-standard stack*

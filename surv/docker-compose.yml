@@ -43,10 +43,12 @@ services:
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
+      - ./certs:/certs:ro
     networks:
       - surv_net
     depends_on:
       - headscale
+
   derp:
     image: fredliang/derper:latest
     container_name: surv_derp

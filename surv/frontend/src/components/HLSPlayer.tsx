@@ -3,12 +3,14 @@ import Hls from 'hls.js'
 import { WifiOff, Loader } from 'lucide-react'
 
 interface Props {
-  src:       string
-  camId:     string
-  isOnline:  boolean
-  className?: string
-  muted?:    boolean
-  autoPlay?: boolean
+  src:            string
+  camId:          string
+  isOnline:       boolean
+  className?:     string
+  muted?:         boolean
+  autoPlay?:      boolean
+  /** Called when the player needs a fresh tokenised HLS URL (e.g. 401). */
+  onNeedsRefresh?: () => void
 }
 
 type State = 'loading' | 'playing' | 'error'
@@ -20,16 +22,22 @@ export default function HLSPlayer({
   className = '',
   muted     = true,
   autoPlay  = true,
+  onNeedsRefresh,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef   = useRef<Hls | null>(null)
+  const refreshRef = useRef(onNeedsRefresh)
   const [state, setState] = useState<State>('loading')
+  const [errorHint, setErrorHint] = useState('')
+
+  useEffect(() => { refreshRef.current = onNeedsRefresh }, [onNeedsRefresh])
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !isOnline) { setState('loading'); return }
+    if (!video || !isOnline || !src) { setState('loading'); return }
 
     setState('loading')
+    setErrorHint('')
 
     const destroy = () => {
       hlsRef.current?.destroy()
@@ -45,13 +53,41 @@ export default function HLSPlayer({
         video.play().catch(() => {})
         setState('playing')
       })
-      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setState('error') })
+      hls.on(Hls.Events.ERROR, (_, d) => {
+        if (!d.fatal) return
+
+        const httpCode = d.response?.code
+        if (httpCode === 401 || httpCode === 403) {
+          setErrorHint('Session expired')
+          refreshRef.current?.()
+          return
+        }
+
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          hls.startLoad()
+          return
+        }
+
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          // Often H.265 in browsers that only support H.264 in MSE/HLS.
+          setErrorHint('Codec not supported — use H.264 on camera')
+          hls.recoverMediaError()
+          return
+        }
+
+        setErrorHint('Stream unavailable')
+        setState('error')
+      })
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = src
       video.addEventListener('loadedmetadata', () => setState('playing'), { once: true })
-      video.addEventListener('error',          () => setState('error'),   { once: true })
+      video.addEventListener('error', () => {
+        setErrorHint('Codec not supported — use H.264 on camera')
+        setState('error')
+      }, { once: true })
       if (autoPlay) video.play().catch(() => {})
     } else {
+      setErrorHint('HLS not supported')
       setState('error')
     }
 
@@ -79,9 +115,12 @@ export default function HLSPlayer({
 
       {/* Stream error */}
       {isOnline && state === 'error' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 z-10">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 z-10 px-3 text-center">
           <WifiOff size={18} className="text-alert" />
           <span className="font-mono text-xs text-alert">STREAM ERROR</span>
+          {errorHint && (
+            <span className="font-mono text-[10px] text-muted">{errorHint}</span>
+          )}
         </div>
       )}
 

@@ -8,6 +8,7 @@ from typing import List
 from app.database import get_db
 from app.models.camera import Camera, VideoSegment
 from app.services.minio_service import get_presigned_url
+from app.services.access_service import ensure_camera_accessible
 from app.schemas.recording import TimelineOut, SegmentOut
 from app.dependencies.auth import require_permission, CurrentUser
 
@@ -26,6 +27,7 @@ async def get_timeline(
     cam = cam_result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
+    await ensure_camera_accessible(user, db, cam.id)
 
     try:
         day_start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -78,6 +80,7 @@ async def get_download_url(
     cam = cam_result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, f"Camera '{cam_id}' not found")
+    await ensure_camera_accessible(user, db, cam.id)
 
     seg_result = await db.execute(
         select(VideoSegment)

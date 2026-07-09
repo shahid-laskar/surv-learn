@@ -14,6 +14,7 @@ import json
 import time
 import logging
 import threading
+import ipaddress
 from datetime import datetime, timezone
 from lxml import etree
 from onvif import ONVIFCamera
@@ -62,6 +63,26 @@ def get_kafka_producer() -> KafkaProducer:
 
 def get_db_connection():
     return psycopg2.connect(DB_URL)
+
+
+def is_onvif_target(camera: dict) -> bool:
+    """
+    Return True if the hub can reach this camera's ONVIF endpoint.
+
+    Simulated edge cameras are registered with 127.0.0.x "LAN" IPs that only
+    exist inside the edge NVR — the hub ONVIF producer must not poll them.
+    """
+    ip_str = (camera.get("cam_ip") or "").strip()
+    if not ip_str:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        log.warning(f"[{camera.get('cam_id')}] Invalid cam_ip={ip_str!r} — skipping ONVIF")
+        return False
+    if addr.is_loopback:
+        return False
+    return True
 
 
 def get_active_cameras(conn) -> list[dict]:
@@ -228,7 +249,7 @@ class ONVIFCameraProducer:
         state = parse_state_from_message(msg)
         log.debug(f"[{self.cam_path}] Parsed state={state}")
         if state is None:
-            log.info(f"[{self.cam_path}] Ignoring message — no State key found")
+            log.debug(f"[{self.cam_path}] Ignoring message — no motion State/IsMotion key")
             return  # not a State message — ignore
 
         topic      = parse_topic_from_notification(msg)
@@ -265,6 +286,7 @@ class MotionProducerWorker:
 
     def __init__(self):
         self.producers: dict[int, ONVIFCameraProducer] = {}
+        self._skipped_logged: set[int] = set()
         self.kafka = get_kafka_producer()
 
     def run(self):
@@ -274,16 +296,27 @@ class MotionProducerWorker:
         while True:
             try:
                 cameras    = get_active_cameras(conn)
-                active_ids = {c["id"] for c in cameras}
+                onvif_cams = [c for c in cameras if is_onvif_target(c)]
+                active_ids = {c["id"] for c in onvif_cams}
+
+                for cam in cameras:
+                    if is_onvif_target(cam):
+                        continue
+                    if cam["id"] not in self._skipped_logged:
+                        log.info(
+                            f"[{cam['cam_id']}] Skipping ONVIF — "
+                            f"unreachable sim/loopback IP {cam['cam_ip']}"
+                        )
+                        self._skipped_logged.add(cam["id"])
 
                 # Start producers for newly active cameras
-                for cam in cameras:
+                for cam in onvif_cams:
                     if cam["id"] not in self.producers:
                         p = ONVIFCameraProducer(cam, self.kafka)
                         p.start()
                         self.producers[cam["id"]] = p
 
-                # Stop producers for deactivated cameras
+                # Stop producers for deactivated or skipped cameras
                 for cam_id in list(self.producers):
                     if cam_id not in active_ids:
                         self.producers[cam_id].stop()

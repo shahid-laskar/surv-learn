@@ -1,3 +1,5 @@
+> **Superseded:** See [sarvanetra_final_implementation_plan.md](sarvanetra_final_implementation_plan.md) for the authoritative implementation plan. This document is retained as the detailed simulation test appendix.
+
 # Sarvanetra — Test Plan: Edge NVR, VPN Overlay & Simulated 100-Camera Fleet
 ## Validating Phases 0–15 Without Physical Cameras or Physical Edge Hardware
 

@@ -5,9 +5,31 @@ import { format } from 'date-fns'
 import { Bell, BellOff, ExternalLink, Filter } from 'lucide-react'
 import { fetchMotionEvents, fetchCameras, type MotionEvent } from '../api/client'
 
+// Failsafe: if backend never receives a corresponding `motion_end`,
+// treat very old "active" events as ended so the UI doesn't get stuck.
+const STALE_ACTIVE_MS = 30 * 60 * 1000 // 30 minutes
+
+function effectiveMotionEnd(e: MotionEvent): string | null {
+  if (e.motion_end) return e.motion_end
+  if (!e.is_active) return null
+
+  const startMs = new Date(e.motion_start).getTime()
+  const ageMs = Date.now() - startMs
+  if (ageMs < STALE_ACTIVE_MS) return null
+
+  // Approximate end time so the UI can display an Ended duration.
+  return new Date(startMs + STALE_ACTIVE_MS).toISOString()
+}
+
+function effectiveIsActive(e: MotionEvent): boolean {
+  // If we computed an effective end time, it's effectively ended in the UI.
+  return effectiveMotionEnd(e) ? false : e.is_active
+}
+
 function dur(e: MotionEvent) {
-  if (!e.motion_end) return '—'
-  const s = Math.round((new Date(e.motion_end).getTime() - new Date(e.motion_start).getTime()) / 1000)
+  const end = effectiveMotionEnd(e)
+  if (!end) return '—'
+  const s = Math.round((new Date(end).getTime() - new Date(e.motion_start).getTime()) / 1000)
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
@@ -17,20 +39,42 @@ export default function MotionEvents() {
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'ended'>('all')
   const [limit, setLimit] = useState(100)
 
-  const { data: cameras = [] } = useQuery({ queryKey: ['cameras'], queryFn: fetchCameras })
+  const { data: cameras = [], error: camerasError, isFetching: isFetchingCameras, refetch: refetchCameras } = useQuery({
+    queryKey: ['cameras'],
+    queryFn:  fetchCameras,
+    // Keep camera metadata reasonably fresh and self-healing after transient failures.
+    refetchInterval:      20_000,
+    refetchOnReconnect:   true,
+    refetchOnWindowFocus: true,
+    retry:                3,
+  })
   const camMap = Object.fromEntries(cameras.map(c => [c.id, c]))
 
-  const { data: events = [], isFetching, refetch } = useQuery({
-    queryKey:       ['motion', filterCam, filterActive, limit],
+  const { data: events = [], isFetching, error: eventsError, refetch } = useQuery({
+    // We fetch unfiltered motion events and apply the active/ended filter client-side.
+    // This keeps the UI consistent even if the backend momentarily misses a `motion_end`.
+    queryKey:       ['motion', filterCam, limit],
     queryFn:        () => fetchMotionEvents({
       camera_id: filterCam !== 'all' ? cameras.find(c => c.cam_id === filterCam)?.id : undefined,
-      active:    filterActive === 'all' ? undefined : filterActive === 'active',
+      active:    undefined,
       limit,
     }),
-    refetchInterval: 10_000,
+    // Periodic polling so we don't rely solely on manual refresh.
+    refetchInterval:      10_000,
+    refetchOnReconnect:   true,
+    refetchOnWindowFocus: true,
+    // Allow a few quick retries on transient network errors; subsequent
+    // interval polls + manual "Refresh" will also continue to heal.
+    retry:                3,
   })
 
-  const activeCount = events.filter(e => e.is_active).length
+  const activeCount = events.filter(e => effectiveIsActive(e)).length
+  const filteredEvents =
+    filterActive === 'all'
+      ? events
+      : filterActive === 'active'
+        ? events.filter(e => effectiveIsActive(e))
+        : events.filter(e => !effectiveIsActive(e))
 
   return (
     <div className="flex flex-col h-full p-4 gap-4 animate-[fade-in_0.2s_ease-out]">
@@ -51,11 +95,23 @@ export default function MotionEvents() {
             </span>
           )}
         </div>
-        <button onClick={() => refetch()}
-                className="px-3 py-1.5 text-muted hover:text-slate-200 text-xs font-medium
-                           rounded hover:bg-border transition-colors">
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {(camerasError || eventsError) && (
+            <span className="text-[10px] font-mono text-alert bg-alert/10 border border-alert/40 rounded px-2 py-1">
+              Network issue — will retry
+            </span>
+          )}
+          <button
+            onClick={() => {
+              refetchCameras()
+              refetch()
+            }}
+            className="px-3 py-1.5 text-muted hover:text-slate-200 text-xs font-medium
+                       rounded hover:bg-border transition-colors"
+          >
+            {isFetching || isFetchingCameras ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -84,14 +140,14 @@ export default function MotionEvents() {
         </div>
 
         <span className="text-xs text-muted ml-auto">
-          {isFetching ? 'Refreshing...' : `${events.length} events`}
+          {isFetching ? 'Refreshing...' : `${filteredEvents.length} events`}
         </span>
       </div>
 
       {/* Table */}
       <div className="flex-1 bg-panel border border-border rounded overflow-hidden flex flex-col min-h-0">
         <div className="overflow-y-auto flex-1">
-          {events.length === 0 ? (
+          {filteredEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <BellOff size={28} className="text-dim" />
               <p className="text-sm text-muted">No motion events found</p>
@@ -106,16 +162,16 @@ export default function MotionEvents() {
                 </tr>
               </thead>
               <tbody>
-                {events.map(ev => {
+                {filteredEvents.map(ev => {
                   const cam = camMap[ev.camera_id]
                   return (
                     <tr key={ev.id}
                         className="border-b border-border/50 hover:bg-border/30 transition-colors">
                       <td className="px-4 py-2.5">
                         <span className="flex items-center gap-1.5">
-                          <span className={`size-1.5 rounded-full ${ev.is_active ? 'bg-alert animate-[pulse-dot_2s_ease-in-out_infinite]' : 'bg-dim'}`} />
-                          <span className={`font-mono text-[10px] ${ev.is_active ? 'text-alert' : 'text-muted'}`}>
-                            {ev.is_active ? 'ACTIVE' : 'ENDED'}
+                          <span className={`size-1.5 rounded-full ${effectiveIsActive(ev) ? 'bg-alert animate-[pulse-dot_2s_ease-in-out_infinite]' : 'bg-dim'}`} />
+                          <span className={`font-mono text-[10px] ${effectiveIsActive(ev) ? 'text-alert' : 'text-muted'}`}>
+                            {effectiveIsActive(ev) ? 'ACTIVE' : 'ENDED'}
                           </span>
                         </span>
                       </td>
@@ -127,14 +183,19 @@ export default function MotionEvents() {
                         {format(new Date(ev.motion_start), 'dd MMM HH:mm:ss')}
                       </td>
                       <td className="px-4 py-2.5 font-mono text-muted">
-                        {ev.motion_end ? format(new Date(ev.motion_end), 'HH:mm:ss') : <span className="text-alert">—</span>}
+                        {effectiveMotionEnd(ev) ? (
+                          format(new Date(effectiveMotionEnd(ev) as string), 'HH:mm:ss')
+                        ) : (
+                          <span className="text-alert">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 font-mono text-muted">{dur(ev)}</td>
                       <td className="px-4 py-2.5 text-right">
                         <button
                           onClick={() => {
-                            const d = format(new Date(ev.motion_start), 'yyyy-MM-dd')
-                            navigate(`/playback?cam=${cam?.cam_id}&date=${d}`)
+                            const startIso = new Date(ev.motion_start).toISOString()
+                            const d        = format(new Date(ev.motion_start), 'yyyy-MM-dd')
+                            navigate(`/playback?cam=${cam?.cam_id}&date=${d}&start=${encodeURIComponent(startIso)}`)
                           }}
                           title="Review recording"
                           className="text-accent hover:text-accent/70 transition-colors"

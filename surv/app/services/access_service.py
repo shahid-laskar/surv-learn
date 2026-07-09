@@ -17,6 +17,7 @@ Returning None means "no filter — all cameras accessible" (for super-users).
 """
 
 from typing import Optional
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -92,3 +93,17 @@ async def get_accessible_camera_ids(
         return None
 
     return list(accessible)
+
+
+async def ensure_camera_accessible(
+    user: CurrentUser,
+    db: AsyncSession,
+    camera_pk: int,
+) -> None:
+    """
+    Raise HTTP 403 if the user may not access the camera with the given primary key.
+    No-op for unrestricted roles (get_accessible_camera_ids returns None).
+    """
+    accessible_ids = await get_accessible_camera_ids(user, db)
+    if accessible_ids is not None and camera_pk not in accessible_ids:
+        raise HTTPException(status_code=403, detail="Access to this camera is not permitted")

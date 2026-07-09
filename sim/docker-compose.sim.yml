@@ -1,0 +1,150 @@
+# sim/docker-compose.sim.yml
+# Parameterized edge NVR simulation stack — one instance per simulated site.
+#
+# Launch with:
+#   docker compose -p sim_site_01 --env-file site-envs/site-01.env -f docker-compose.sim.yml up -d
+#
+# Required env vars (set in site-envs/site-XX.env):
+#   SITE_CODE            e.g. SITE01
+#   SITE_NUM             e.g. 01   (2-digit, for clip filename)
+#   ENROLLMENT_PREAUTH_KEY  (headscale pre-auth key)
+#   RTSP_PORT            host port for MediaMTX RTSP (unique per site, e.g. 9554/9555/9556)
+#   HLS_PORT             host port for MediaMTX HLS  (e.g. 9888/9889/9890)
+#   MGMT_PORT            host port for MediaMTX API  (e.g. 9901/9902/9903)
+#   CAMERAS_PER_SITE     number of simulated cameras (3)
+#   HUB_API_URL          e.g. http://10.44.0.209:8002/api/v1
+#   HEADSCALE_DOMAIN     e.g. vpn.sarvanetra.bsnl.co.in
+
+networks:
+  sim_net:
+    driver: bridge
+
+volumes:
+  ts_state:
+  recordings:
+  hls:
+  edge_data:
+
+services:
+
+  # ── Tailscale overlay tunnel ──────────────────────────────────────────────
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: nvr-${SITE_CODE}
+    container_name: sim_${SITE_CODE}_tailscale
+    environment:
+      TS_AUTHKEY: ${ENROLLMENT_PREAUTH_KEY}
+      TS_EXTRA_ARGS: --login-server=https://${HEADSCALE_DOMAIN}:8180 --accept-routes
+      TS_STATE_DIR: /var/lib/tailscale
+    cap_add: [NET_ADMIN, NET_RAW]
+    extra_hosts:
+      - "${HEADSCALE_DOMAIN}:10.44.0.209"
+    volumes:
+      - ts_state:/var/lib/tailscale
+    networks:
+      - sim_net
+    restart: unless-stopped
+
+  # ── Edge MediaMTX (RTSP ingest + HLS + local recording) ──────────────────
+  mediamtx-edge:
+    image: bluenviron/mediamtx:latest
+    container_name: sim_${SITE_CODE}_mediamtx
+    volumes:
+      - ../surv/mediamtx/mediamtx-edge.yml:/mediamtx.yml:ro
+      - recordings:/recordings
+      - hls:/var/hls
+    networks:
+      - sim_net
+    ports:
+      - "${RTSP_PORT}:8554"
+      - "${HLS_PORT}:8888"
+      - "${MGMT_PORT}:9997"
+    restart: unless-stopped
+
+  # ── Edge agent (heartbeat + config-sync + backup uploader) ───────────────
+  edge-agent:
+    build:
+      context: ../edge-agent
+      dockerfile: Dockerfile
+    container_name: sim_${SITE_CODE}_agent
+    environment:
+      SITE_CODE: ${SITE_CODE}
+      HUB_API_URL: ${HUB_API_URL}
+      LOCAL_DATABASE_URL: sqlite:////data/edge.db
+      MEDIAMTX_API_URL: http://mediamtx-edge:9997
+      BACKUP_ENABLED: "true"
+      BACKUP_TRIGGER: motion
+      BACKUP_CLIP_SECONDS: "15"
+    volumes:
+      - edge_data:/data
+      - recordings:/recordings
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx-edge
+    restart: unless-stopped
+
+  # ── Simulated camera 01 (ffmpeg RTSP publisher, stream-copy loop) ─────────
+  cam-01:
+    image: linuxserver/ffmpeg:latest
+    container_name: sim_${SITE_CODE}_cam01
+    volumes:
+      - ./clips:/clips:ro
+    entrypoint: >
+      /bin/sh -c "sleep 5 &&
+      ffmpeg -stream_loop -1 -re -i /clips/site-${SITE_NUM}.mp4
+      -c copy -f rtsp rtsp://mediamtx-edge:8554/SIMCAM-${SITE_CODE}-01"
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx-edge
+    restart: unless-stopped
+
+  # ── Simulated camera 02 ───────────────────────────────────────────────────
+  cam-02:
+    image: linuxserver/ffmpeg:latest
+    container_name: sim_${SITE_CODE}_cam02
+    volumes:
+      - ./clips:/clips:ro
+    entrypoint: >
+      /bin/sh -c "sleep 7 &&
+      ffmpeg -stream_loop -1 -re -i /clips/site-${SITE_NUM}.mp4
+      -c copy -f rtsp rtsp://mediamtx-edge:8554/SIMCAM-${SITE_CODE}-02"
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx-edge
+    restart: unless-stopped
+
+  # ── Simulated camera 03 ───────────────────────────────────────────────────
+  cam-03:
+    image: linuxserver/ffmpeg:latest
+    container_name: sim_${SITE_CODE}_cam03
+    volumes:
+      - ./clips:/clips:ro
+    entrypoint: >
+      /bin/sh -c "sleep 9 &&
+      ffmpeg -stream_loop -1 -re -i /clips/site-${SITE_NUM}.mp4
+      -c copy -f rtsp rtsp://mediamtx-edge:8554/SIMCAM-${SITE_CODE}-03"
+    networks:
+      - sim_net
+    depends_on:
+      - mediamtx-edge
+    restart: unless-stopped
+
+  # ── Local retention cleaner ───────────────────────────────────────────────
+  local-cleaner:
+    build:
+      context: ../edge-agent
+      dockerfile: Dockerfile
+    container_name: sim_${SITE_CODE}_cleaner
+    command: python local_retention.py
+    environment:
+      LOCAL_DATABASE_URL: sqlite:////data/edge.db
+      RETENTION_DAYS: "7"
+    volumes:
+      - recordings:/recordings
+      - edge_data:/data
+    networks:
+      - sim_net
+    restart: unless-stopped
