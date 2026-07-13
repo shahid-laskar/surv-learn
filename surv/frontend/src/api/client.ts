@@ -91,6 +91,7 @@ export interface Segment {
   start:            string
   end:              string | null
   duration_seconds: number | null
+  file_size_bytes?: number | null
   playback_url:     string
 }
 

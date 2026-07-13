@@ -7,6 +7,7 @@ class SegmentOut(BaseModel):
     start:            datetime
     end:              Optional[datetime]
     duration_seconds: Optional[int]
+    file_size_bytes:  Optional[int] = None
     playback_url:     str
 
 class TimelineOut(BaseModel):

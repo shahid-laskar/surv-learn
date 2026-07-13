@@ -5,19 +5,25 @@ import { ClipboardList, Lock, RefreshCw, Filter } from 'lucide-react'
 import { fetchAuditLogs, type AuditLog } from '../api/client'
 import { hasPermission, hasRole } from '../lib/auth'
 
-const ACTION_COLORS: Record<string, string> = {
-  LOGIN:           'bg-green-500/10 text-green-300',
-  LOGOUT:          'bg-dim/20 text-muted',
-  CAMERA_CREATE:   'bg-blue-500/10 text-blue-300',
-  CAMERA_UPDATE:   'bg-yellow-500/10 text-yellow-300',
-  CAMERA_DELETE:   'bg-red-500/10 text-red-300',
+const ACTION_TONE: Record<string, { bg: string; color: string }> = {
+  LOGIN:         { bg: 'oklch(0.72 0.17 150 / 0.1)', color: 'var(--color-success)' },
+  LOGOUT:        { bg: 'oklch(0.32 0.025 260 / 0.2)', color: 'var(--color-muted-foreground)' },
+  CAMERA_CREATE: { bg: 'oklch(0.78 0.14 200 / 0.1)', color: 'var(--color-primary)' },
+  CAMERA_UPDATE: { bg: 'oklch(0.78 0.15 75 / 0.1)',  color: 'var(--color-warning)' },
+  CAMERA_DELETE: { bg: 'oklch(0.62 0.22 25 / 0.1)',  color: 'var(--color-destructive)' },
 }
-function actionColor(action: string) {
-  return ACTION_COLORS[action] ?? 'bg-dim/10 text-muted'
+function actionTone(action: string) {
+  return ACTION_TONE[action] ?? { bg: 'oklch(0.32 0.025 260 / 0.1)', color: 'var(--color-muted-foreground)' }
 }
 
 const ENTITY_TYPES = ['camera', 'user', 'customer', 'organization', 'role']
 const ACTIONS = ['LOGIN', 'LOGOUT', 'CAMERA_CREATE', 'CAMERA_UPDATE', 'CAMERA_DELETE']
+
+const selectStyle = {
+  background: 'oklch(0.28 0.03 260 / 0.5)',
+  color: 'var(--color-foreground)',
+  boxShadow: '0 0 0 1px var(--color-border)',
+} as React.CSSProperties
 
 export default function AuditLog() {
   const [entityType, setEntityType] = useState('')
@@ -42,91 +48,112 @@ export default function AuditLog() {
   if (!canView) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 h-full">
-        <Lock size={32} className="text-dim" />
-        <p className="text-sm text-slate-300">system.audit permission required</p>
+        <Lock size={32} style={{ color: 'var(--color-dim)' }} />
+        <p className="text-sm" style={{ color: 'var(--color-foreground)' }}>system.audit permission required</p>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full p-4 gap-4 animate-[fade-in_0.2s_ease-out]">
+    <div className="flex flex-col h-full p-4 lg:p-6 gap-5 animate-[fade-in_0.2s_ease-out]">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-base font-semibold text-slate-100">Audit Log</h1>
-          <p className="text-xs text-muted mt-0.5">
+          <h1 className="text-base font-semibold flex items-center gap-2"
+              style={{ fontFamily: 'var(--font-display)', color: 'var(--color-foreground)' }}>
+            <ClipboardList size={16} style={{ color: 'var(--color-primary)' }} />
+            Audit Log
+          </h1>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
             {logs.length} events{isFetching && ' · refreshing...'}
           </p>
         </div>
-        <button onClick={() => refetch()}
-          className="p-1.5 text-muted hover:text-slate-200 rounded hover:bg-border transition-colors">
-          <RefreshCw size={13} className={isFetching ? 'animate-spin text-accent' : ''} />
+        <button
+          onClick={() => refetch()}
+          className="p-2 rounded-lg transition-colors"
+          style={{ color: 'var(--color-muted-foreground)' }}>
+          <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''}
+                     style={{ color: isFetching ? 'var(--color-primary)' : undefined }} />
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 shrink-0">
-        <Filter size={13} className="text-muted" />
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl p-3 shrink-0"
+           style={{ background: 'oklch(0.22 0.035 260 / 0.5)', boxShadow: '0 0 0 1px var(--color-border)' }}>
+        <Filter size={14} className="ml-1" style={{ color: 'var(--color-muted-foreground)' }} />
         <select value={entityType} onChange={e => { setEntityType(e.target.value); setOffset(0) }}
-          className="bg-surface border border-border rounded px-3 py-1.5 text-sm text-slate-200
-                     focus:outline-none focus:border-accent/60 w-40">
+          className="rounded-md px-2 py-1 text-xs outline-none" style={selectStyle}>
           <option value="">All entities</option>
           {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={action} onChange={e => { setAction(e.target.value); setOffset(0) }}
-          className="bg-surface border border-border rounded px-3 py-1.5 text-sm text-slate-200
-                     focus:outline-none focus:border-accent/60 w-44">
+          className="rounded-md px-2 py-1 text-xs outline-none" style={selectStyle}>
           <option value="">All actions</option>
           {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
       </div>
 
       {/* Table */}
-      <div className="flex-1 bg-panel border border-border rounded overflow-hidden flex flex-col min-h-0">
+      <div className="flex-1 rounded-2xl overflow-hidden flex flex-col min-h-0"
+           style={{ background: 'oklch(0.22 0.035 260 / 0.5)', boxShadow: '0 0 0 1px var(--color-border)' }}>
         {logs.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3">
-            <ClipboardList size={32} className="text-dim" />
-            <p className="text-sm text-slate-300">No audit logs found</p>
-            <p className="text-xs text-muted">Adjust the filters or wait for activity</p>
+            <ClipboardList size={32} style={{ color: 'var(--color-dim)' }} />
+            <p className="text-sm" style={{ color: 'var(--color-foreground)' }}>No audit logs found</p>
+            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Adjust the filters or wait for activity</p>
           </div>
         ) : (
           <>
             <div className="overflow-y-auto flex-1">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-panel border-b border-border z-10">
-                  <tr className="text-muted font-mono">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="text-[11px] font-medium uppercase tracking-widest sticky top-0"
+                      style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-muted-foreground)', background: 'oklch(0.22 0.035 260)' }}>
                     {['Time', 'User', 'Action', 'Entity', 'Entity ID', 'IP'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-left">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.map((log: AuditLog) => (
-                    <tr key={log.id}
-                      className="border-b border-border/50 hover:bg-border/20 transition-colors">
-                      <td className="px-4 py-2.5 font-mono text-muted whitespace-nowrap">
-                        {format(new Date(log.created_at), 'dd MMM HH:mm:ss')}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-slate-300">
-                        {log.username ?? <span className="text-dim italic">system</span>}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`font-mono text-[10px] px-2 py-0.5 rounded ${actionColor(log.action)}`}>
-                          {log.action}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-muted">{log.entity_type ?? '—'}</td>
-                      <td className="px-4 py-2.5 font-mono text-muted">{log.entity_id ?? '—'}</td>
-                      <td className="px-4 py-2.5 font-mono text-dim">{log.ip_address ?? '—'}</td>
-                    </tr>
-                  ))}
+                  {logs.map((log: AuditLog) => {
+                    const tone = actionTone(log.action)
+                    return (
+                      <tr key={log.id} className="transition-colors last:border-b-0"
+                          style={{ borderBottom: '1px solid var(--color-border)' }}
+                          onMouseOver={e => (e.currentTarget.style.background = 'oklch(0.28 0.03 260 / 0.4)')}
+                          onMouseOut={e => (e.currentTarget.style.background = 'transparent')}>
+                        <td className="px-4 py-2.5 font-mono whitespace-nowrap"
+                            style={{ color: 'var(--color-muted-foreground)' }}>
+                          {format(new Date(log.created_at), 'dd MMM HH:mm:ss')}
+                        </td>
+                        <td className="px-4 py-2.5 font-mono"
+                            style={{ color: 'var(--color-foreground)' }}>
+                          {log.username ?? <span style={{ color: 'var(--color-dim)', fontStyle: 'italic' }}>system</span>}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className="font-mono text-[10px] px-2 py-0.5 rounded-md"
+                                style={{ background: tone.bg, color: tone.color }}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs capitalize"
+                            style={{ color: 'var(--color-muted-foreground)' }}>{log.entity_type ?? '—'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs"
+                            style={{ color: 'var(--color-muted-foreground)' }}>{log.entity_id ?? '—'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs"
+                            style={{ color: 'var(--color-dim)' }}>{log.ip_address ?? '—'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
             {logs.length >= limit && (
-              <div className="border-t border-border px-4 py-2 flex justify-center shrink-0">
+              <div className="px-4 py-2 flex justify-center shrink-0"
+                   style={{ borderTop: '1px solid var(--color-border)' }}>
                 <button onClick={() => setLimit(l => l + 100)}
-                  className="px-3 py-1.5 text-muted hover:text-slate-200 text-xs font-medium rounded hover:bg-border transition-colors">
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+                  style={{ color: 'var(--color-muted-foreground)', background: 'var(--color-secondary)' }}>
                   Load more
                 </button>
               </div>

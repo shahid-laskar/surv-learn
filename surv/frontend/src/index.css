@@ -1,25 +1,81 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
+/*
+ * Sarvanetra — Trust Enterprise dark design system.
+ * Deep navy canvas, teal-cyan accent, Manrope display + Inter body.
+ */
+
 @theme {
-  /* ── Palette ─────────────────────────────────────────── */
-  --color-surface:  #080C10;
-  --color-panel:    #0E1420;
-  --color-card:     #111827;
-  --color-border:   #1C2333;
-  --color-accent:   #3B82F6;
-  --color-online:   #22C55E;
-  --color-alert:    #EF4444;
-  --color-warn:     #F59E0B;
-  --color-muted:    #64748B;
-  --color-dim:      #374151;
+  /* ── Radius ─────────────────────────────────────────── */
+  --radius: 0.75rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 
   /* ── Typography ──────────────────────────────────────── */
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope", "Inter", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 
-  /* ── Animation ───────────────────────────────────────── */
+  /* ── Trust Enterprise palette — dark by default ─────── */
+  --color-background:      oklch(0.19 0.04 260);    /* #0d1424 deep navy */
+  --color-foreground:      oklch(0.96 0.005 250);   /* near-white */
+  --color-panel:           oklch(0.23 0.035 260);
+  --color-card:            oklch(0.22 0.035 260);
+  --color-card-foreground: oklch(0.96 0.005 250);
+  --color-popover:         oklch(0.23 0.035 260);
+  --color-popover-foreground: oklch(0.96 0.005 250);
+
+  --color-primary:          oklch(0.78 0.14 200);   /* teal-cyan */
+  --color-primary-foreground: oklch(0.19 0.04 260);
+
+  --color-secondary:          oklch(0.28 0.03 260);
+  --color-secondary-foreground: oklch(0.96 0.005 250);
+
+  --color-muted:            oklch(0.27 0.025 260);
+  --color-muted-foreground: oklch(0.68 0.02 260);
+
+  --color-accent:           oklch(0.78 0.14 200);
+  --color-accent-foreground: oklch(0.19 0.04 260);
+
+  --color-destructive:      oklch(0.62 0.22 25);
+  --color-destructive-foreground: oklch(0.98 0.005 250);
+
+  --color-warning:  oklch(0.78 0.15 75);
+  --color-success:  oklch(0.72 0.17 150);
+
+  --color-border: oklch(1 0 0 / 8%);
+  --color-input:  oklch(1 0 0 / 12%);
+  --color-ring:   oklch(0.78 0.14 200 / 60%);
+
+  --color-sidebar:                oklch(0.17 0.04 260);
+  --color-sidebar-foreground:     oklch(0.85 0.01 260);
+  --color-sidebar-primary:        oklch(0.78 0.14 200);
+  --color-sidebar-accent:         oklch(0.28 0.03 260);
+  --color-sidebar-border:         oklch(1 0 0 / 8%);
+
+  /* legacy alias names used by existing pages */
+  --color-surface: oklch(0.19 0.04 260);
+  --color-online:  oklch(0.72 0.17 150);
+  --color-alert:   oklch(0.62 0.22 25);
+  --color-warn:    oklch(0.78 0.15 75);
+  --color-muted-old: oklch(0.68 0.02 260);
+  --color-dim:     oklch(0.32 0.025 260);
+
+  /* ── Chart tokens ────────────────────────────────────── */
+  --color-chart-1: oklch(0.78 0.14 200);
+  --color-chart-2: oklch(0.72 0.17 150);
+  --color-chart-3: oklch(0.78 0.15 75);
+  --color-chart-4: oklch(0.62 0.22 25);
+  --color-chart-5: oklch(0.65 0.18 290);
+
+  /* ── Animations ──────────────────────────────────────── */
   --animate-pulse-dot: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-fade-in:   fade-in 0.2s ease-out;
+  --animate-ping:      ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
 
   @keyframes pulse-dot {
     0%, 100% { opacity: 1; }
@@ -30,11 +86,20 @@
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  @keyframes ping {
+    75%, 100% { transform: scale(2); opacity: 0; }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 }
 
 /* ── Base resets ─────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
+  border-color: var(--color-border);
 }
 
 html, body, #root {
@@ -44,10 +109,16 @@ html, body, #root {
 }
 
 body {
-  background-color: var(--color-surface);
-  color: #E2E8F0;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────── */
@@ -70,4 +141,17 @@ body {
   );
   pointer-events: none;
   z-index: 1;
+}
+
+/* ── Utility: font-display ───────────────────────────────── */
+@utility font-display {
+  font-family: var(--font-display);
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility text-pretty {
+  text-wrap: pretty;
 }

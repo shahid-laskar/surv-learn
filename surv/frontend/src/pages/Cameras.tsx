@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { Plus, Trash2, X, Check, Wifi, Edit2 } from 'lucide-react'
+import { Plus, Trash2, X, Check, Wifi, Edit2, Loader2 } from 'lucide-react'
 import { fetchCameras, createCamera, updateCamera, deleteCamera, fetchOrgs, fetchCustomers, type CameraCreate } from '../api/client'
-import StatusBadge from '../components/StatusBadge'
 
 const EMPTY: CameraCreate = {
   cam_id: '', cam_name: '', cam_ip: '',
@@ -26,6 +25,25 @@ const FIELDS: {
   { label: 'Password',   field: 'onvif_password', type: 'password', placeholder: '••••••' },
   { label: 'Retention Days', field: 'retention_days', type: 'number', placeholder: '30' },
 ]
+
+// ── Shared input style ────────────────────────────────────
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1.5 uppercase tracking-widest"
+             style={{ color: 'var(--color-muted-foreground)' }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+const inputStyle = {
+  background: 'oklch(0.28 0.03 260 / 0.5)',
+  color: 'var(--color-foreground)',
+  boxShadow: '0 0 0 1px var(--color-border)',
+} as React.CSSProperties
 
 export default function Cameras() {
   const qc = useQueryClient()
@@ -64,17 +82,15 @@ export default function Cameras() {
     setForm(f => ({ ...f, [field]: value }))
   }
 
-  const inputCls = `w-full bg-surface border border-border rounded px-3 py-2 text-sm
-                    text-slate-200 placeholder-muted focus:outline-none
-                    focus:border-accent/60 transition-colors`
-
   return (
-    <div className="flex flex-col h-full p-4 gap-4 animate-[fade-in_0.2s_ease-out]">
+    <div className="flex flex-col h-full p-4 lg:p-6 gap-5 animate-[fade-in_0.2s_ease-out]">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-base font-semibold text-slate-100">Cameras</h1>
-          <p className="text-xs text-muted mt-0.5">
+          <h1 className="text-base font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-foreground)' }}>
+            Cameras
+          </h1>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
             {cameras.length} registered · {cameras.filter(c => c.is_online).length} online
             {isFetching && ' · refreshing...'}
           </p>
@@ -82,23 +98,23 @@ export default function Cameras() {
         <button
           onClick={() => {
             if (!showForm || isEditing) {
-              setForm(EMPTY)
-              setIsEditing(false)
-              setShowForm(true)
+              setForm(EMPTY); setIsEditing(false); setShowForm(true)
             } else {
               setShowForm(false)
             }
             setError(null)
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/80
-                     text-white text-sm font-medium rounded transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+          style={{ background: 'var(--color-primary)', color: 'var(--color-primary-foreground)' }}
+          onMouseOver={e => (e.currentTarget.style.filter = 'brightness(1.1)')}
+          onMouseOut={e => (e.currentTarget.style.filter = 'none')}
         >
           {showForm && !isEditing ? <X size={13} /> : <Plus size={13} />}
           {showForm && !isEditing ? 'Cancel' : 'Add camera'}
         </button>
       </div>
 
-      {/* Add form */}
+      {/* Add/Edit form */}
       {showForm && (
         <form
           onSubmit={e => {
@@ -110,16 +126,15 @@ export default function Cameras() {
               createMut.mutate(form)
             }
           }}
-          className="bg-panel border border-border rounded p-4 grid grid-cols-2 gap-3 shrink-0
-                     animate-[fade-in_0.2s_ease-out]"
+          className="rounded-2xl p-5 grid grid-cols-2 gap-4 shrink-0 animate-[fade-in_0.2s_ease-out]"
+          style={{ background: 'oklch(0.22 0.035 260 / 0.5)', boxShadow: '0 0 0 1px var(--color-border)' }}
         >
-          <p className="col-span-2 text-sm font-medium text-slate-300">
+          <p className="col-span-2 text-sm font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-foreground)' }}>
             {isEditing ? `Edit camera: ${form.cam_id}` : 'Register new camera'}
           </p>
 
           {FIELDS.map(({ label, field, type, placeholder, required }) => (
-            <div key={field}>
-              <label className="block text-xs text-muted mb-1">{label}</label>
+            <Field key={field} label={label}>
               <input
                 type={type}
                 placeholder={placeholder}
@@ -127,27 +142,30 @@ export default function Cameras() {
                 disabled={isEditing && field === 'cam_id'}
                 value={String(form[field as keyof CameraCreate] ?? '')}
                 onChange={e => set(field, type === 'number' ? parseInt(e.target.value) || 0 : e.target.value)}
-                className={`${inputCls} ${isEditing && field === 'cam_id' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.boxShadow = '0 0 0 1.5px oklch(0.78 0.14 200 / 0.6)')}
+                onBlur={e => (e.currentTarget.style.boxShadow = '0 0 0 1px var(--color-border)')}
               />
-            </div>
+            </Field>
           ))}
 
-          <div>
-            <label className="block text-xs text-muted mb-1">Organization</label>
-            <select className={inputCls} value={form.organization_id ?? ''}
+          <Field label="Organization">
+            <select className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle}
+              value={form.organization_id ?? ''}
               onChange={e => set('organization_id', e.target.value ? Number(e.target.value) : undefined as unknown as number)}>
               <option value="">— None —</option>
               {orgs.map(o => <option key={o.id} value={o.id}>{o.code} — {o.name}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs text-muted mb-1">Customer</label>
-            <select className={inputCls} value={form.customer_id ?? ''}
+          </Field>
+          <Field label="Customer">
+            <select className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle}
+              value={form.customer_id ?? ''}
               onChange={e => set('customer_id', e.target.value ? Number(e.target.value) : undefined as unknown as number)}>
               <option value="">— None —</option>
               {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-          </div>
+          </Field>
 
           <div className="col-span-2 flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -155,20 +173,20 @@ export default function Cameras() {
                 type="checkbox"
                 checked={!!form.motion_active}
                 onChange={e => set('motion_active', e.target.checked)}
-                className="accent-accent"
+                className="accent-primary"
               />
-              <span className="text-xs text-slate-300">Enable motion detection</span>
+              <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>Enable motion detection</span>
             </label>
-            <div className="flex items-center gap-2">
-              {error && <span className="text-xs text-alert">{error}</span>}
+            <div className="flex items-center gap-3">
+              {error && <span className="text-xs" style={{ color: 'var(--color-destructive)' }}>{error}</span>}
               <button
                 type="submit"
-                disabled={createMut.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/80
-                           text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+                disabled={createMut.isPending || updateMut.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                style={{ background: 'var(--color-primary)', color: 'var(--color-primary-foreground)' }}
               >
-                <Check size={13} />
-                {createMut.isPending ? 'Saving...' : 'Save camera'}
+                {(createMut.isPending || updateMut.isPending) ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                {createMut.isPending || updateMut.isPending ? 'Saving...' : 'Save camera'}
               </button>
             </div>
           </div>
@@ -176,73 +194,94 @@ export default function Cameras() {
       )}
 
       {/* Table */}
-      <div className="flex-1 bg-panel border border-border rounded overflow-hidden flex flex-col min-h-0">
+      <div className="flex-1 overflow-hidden rounded-2xl flex flex-col min-h-0"
+           style={{ background: 'oklch(0.22 0.035 260 / 0.5)', boxShadow: '0 0 0 1px var(--color-border)' }}>
         {cameras.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3">
-            <Wifi size={32} className="text-dim" />
-            <p className="text-sm text-slate-300">No cameras yet</p>
-            <p className="text-xs text-muted">Add a camera to start recording</p>
+            <Wifi size={32} style={{ color: 'var(--color-dim)' }} />
+            <p className="text-sm" style={{ color: 'var(--color-foreground)' }}>No cameras yet</p>
+            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Add a camera to start recording</p>
           </div>
         ) : (
           <div className="overflow-y-auto flex-1">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-panel border-b border-border z-10">
-                <tr className="text-muted font-mono">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-left text-[11px] font-medium uppercase tracking-widest"
+                    style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                   {['Status', 'Camera ID', 'Name', 'IP', 'Motion', 'Last Seen', ''].map(h => (
-                    <th key={h} className={`px-4 py-2.5 ${h === '' ? 'text-right' : 'text-left'}`}>{h}</th>
+                    <th key={h} className={`px-4 py-3 ${h === '' ? 'text-right' : 'text-left'}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {cameras.map(cam => (
-                  <tr key={cam.cam_id} className="border-b border-border/50 hover:bg-border/30 transition-colors">
-                    <td className="px-4 py-3"><StatusBadge online={cam.is_online} /></td>
-                    <td className="px-4 py-3 font-mono text-slate-300">{cam.cam_id}</td>
-                    <td className="px-4 py-3 text-muted">{cam.cam_name ?? <span className="text-dim italic">—</span>}</td>
-                    <td className="px-4 py-3 font-mono text-muted">{cam.cam_ip}:{cam.cam_port}</td>
+                  <tr key={cam.cam_id} className="transition-colors last:border-b-0"
+                      style={{ borderBottom: '1px solid var(--color-border)' }}
+                      onMouseOver={e => (e.currentTarget.style.background = 'oklch(0.28 0.03 260 / 0.4)')}
+                      onMouseOut={e => (e.currentTarget.style.background = 'transparent')}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="size-1.5 rounded-full"
+                              style={{ background: cam.is_online ? 'var(--color-success)' : 'var(--color-destructive)' }} />
+                        <span className="text-[10px] font-mono"
+                              style={{ color: cam.is_online ? 'var(--color-success)' : 'var(--color-muted-foreground)' }}>
+                          {cam.is_online ? 'Online' : 'Offline'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--color-foreground)' }}>{cam.cam_id}</td>
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                      {cam.cam_name ?? <span style={{ color: 'var(--color-dim)', fontStyle: 'italic' }}>—</span>}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                      {cam.cam_ip}:{cam.cam_port}
+                    </td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => updateMut.mutate({ id: cam.cam_id, data: { motion_active: !cam.motion_active } })}
-                        className={`font-mono text-[10px] px-2 py-0.5 rounded border transition-colors
-                                    ${cam.motion_active
-                                      ? 'border-online/40 text-online hover:bg-online/10'
-                                      : 'border-dim text-muted hover:bg-border'}`}
+                        className="font-mono text-[10px] px-2 py-0.5 rounded-md transition-colors"
+                        style={{
+                          boxShadow: `0 0 0 1px ${cam.motion_active ? 'oklch(0.72 0.17 150 / 0.4)' : 'var(--color-dim)'}`,
+                          color: cam.motion_active ? 'var(--color-success)' : 'var(--color-muted-foreground)',
+                        }}
                       >
                         {cam.motion_active ? 'ON' : 'OFF'}
                       </button>
                     </td>
-                    <td className="px-4 py-3 font-mono text-muted">
-                      {cam.last_seen ? format(new Date(cam.last_seen), 'dd MMM HH:mm:ss') : <span className="text-dim">Never</span>}
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                      {cam.last_seen
+                        ? format(new Date(cam.last_seen), 'dd MMM HH:mm:ss')
+                        : <span style={{ color: 'var(--color-dim)' }}>Never</span>}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <button
                         onClick={() => {
                           setForm({
-                            cam_id: cam.cam_id,
-                            cam_name: cam.cam_name ?? '',
-                            cam_ip: cam.cam_ip,
-                            cam_port: cam.cam_port,
-                            onvif_port: cam.onvif_port ?? 80,
-                            rtsp_url: cam.rtsp_url ?? '',
+                            cam_id: cam.cam_id, cam_name: cam.cam_name ?? '',
+                            cam_ip: cam.cam_ip, cam_port: cam.cam_port,
+                            onvif_port: cam.onvif_port ?? 80, rtsp_url: cam.rtsp_url ?? '',
                             onvif_username: cam.onvif_username ?? 'admin',
                             onvif_password: cam.onvif_password ?? 'admin',
                             motion_active: cam.motion_active,
                             organization_id: cam.organization_id ?? undefined,
                             customer_id: cam.customer_id ?? undefined,
+                            retention_days: cam.retention_days ?? 30,
                           })
-                          setIsEditing(true)
-                          setShowForm(true)
-                          setError(null)
+                          setIsEditing(true); setShowForm(true); setError(null)
                         }}
-                        className="text-muted hover:text-accent transition-colors mr-3"
+                        className="rounded-md p-1.5 mr-2 transition-colors"
+                        style={{ color: 'var(--color-muted-foreground)' }}
                         title="Edit Camera"
                       >
                         <Edit2 size={13} />
                       </button>
                       <button
                         onClick={() => { if (confirm(`Remove ${cam.cam_id}?`)) deleteMut.mutate(cam.cam_id) }}
-                        className="text-muted hover:text-alert transition-colors"
+                        className="rounded-md p-1.5 transition-colors"
+                        style={{ color: 'var(--color-muted-foreground)' }}
                         title="Deactivate"
+                        onMouseOver={e => (e.currentTarget.style.color = 'var(--color-destructive)')}
+                        onMouseOut={e => (e.currentTarget.style.color = 'var(--color-muted-foreground)')}
                       >
                         <Trash2 size={13} />
                       </button>

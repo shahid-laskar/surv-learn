@@ -58,6 +58,7 @@ async def get_timeline(
             start=seg.segment_start,
             end=seg.segment_end,
             duration_seconds=seg.duration_seconds,
+            file_size_bytes=seg.file_size_bytes,
             playback_url=url,
         ))
 
