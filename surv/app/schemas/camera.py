@@ -1,6 +1,9 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
+
+StreamProtocol = Literal["rtsp", "rtsps", "rtmp"]
+
 
 class CameraCreate(BaseModel):
     cam_id:         str = Field(..., example="cam_001")
@@ -9,6 +12,7 @@ class CameraCreate(BaseModel):
     cam_port:       int = 554
     onvif_port:     int = 80
     rtsp_url:       Optional[str] = None
+    stream_protocol: StreamProtocol = "rtsp"
     onvif_username: str = "admin"
     onvif_password: str = "admin"
     customer_id:    Optional[int] = None
@@ -26,6 +30,7 @@ class CameraUpdate(BaseModel):
     cam_ip:         Optional[str] = None
     cam_port:       Optional[int] = None
     rtsp_url:       Optional[str] = None
+    stream_protocol: Optional[StreamProtocol] = None
     onvif_port:     Optional[int] = None
     onvif_username: Optional[str] = None
     onvif_password: Optional[str] = None
@@ -45,6 +50,12 @@ class CameraOut(BaseModel):
     cam_id:       str
     cam_name:     Optional[str]
     cam_ip:       str
+    cam_port:     int
+    onvif_port:   Optional[int] = None
+    rtsp_url:     Optional[str] = None
+    stream_protocol: str = "rtsp"
+    onvif_username: Optional[str] = None
+    onvif_password: Optional[str] = None
     customer_id:    Optional[int]
     customer_site_id: Optional[int]
     organization_id: Optional[int]

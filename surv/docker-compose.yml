@@ -308,6 +308,7 @@ services:
       - surv_net
     ports:
       - "${MEDIAMTX_RTSP_PORT}:8554"
+      - "${MEDIAMTX_RTMP_PORT:-1935}:1935"
       - "${MEDIAMTX_HLS_PORT}:8888"
       - "${MEDIAMTX_WEBRTC_PORT}:8889"
       - "8189:8189/udp"

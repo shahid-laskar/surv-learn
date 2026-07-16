@@ -4,27 +4,32 @@ import { format } from 'date-fns'
 import { Plus, Trash2, X, Check, Wifi, Edit2, Loader2 } from 'lucide-react'
 import { fetchCameras, createCamera, updateCamera, deleteCamera, fetchOrgs, fetchCustomers, type CameraCreate } from '../api/client'
 
+type StreamProtocol = 'rtsp' | 'rtsps' | 'rtmp'
+
 const EMPTY: CameraCreate = {
   cam_id: '', cam_name: '', cam_ip: '',
   cam_port: 554, onvif_port: 80,
+  stream_protocol: 'rtsp',
   onvif_username: 'admin', onvif_password: 'admin',
   motion_active: true, retention_days: 30,
 }
 
-const FIELDS: {
-  label: string; field: keyof CameraCreate
-  type: string; placeholder: string; required?: boolean
-}[] = [
-  { label: 'Camera ID',  field: 'cam_id',        type: 'text',     placeholder: 'CAMKRTVM00001', required: true },
-  { label: 'Name',       field: 'cam_name',       type: 'text',     placeholder: 'Main Entrance' },
-  { label: 'IP Address', field: 'cam_ip',         type: 'text',     placeholder: '192.168.1.100', required: true },
-  { label: 'RTSP Port',  field: 'cam_port',       type: 'number',   placeholder: '554' },
-  { label: 'ONVIF Port', field: 'onvif_port',     type: 'number',   placeholder: '80' },
-  { label: 'RTSP URL',   field: 'rtsp_url',       type: 'text',     placeholder: 'rtsp://IP:PORT/PATH', required: true },
-  { label: 'Username',   field: 'onvif_username', type: 'text',     placeholder: 'admin' },
-  { label: 'Password',   field: 'onvif_password', type: 'password', placeholder: '••••••' },
-  { label: 'Retention Days', field: 'retention_days', type: 'number', placeholder: '30' },
-]
+const DEFAULT_PORTS: Record<StreamProtocol, number> = {
+  rtsp: 554,
+  rtsps: 322,
+  rtmp: 1935,
+}
+
+const URL_PLACEHOLDERS: Record<StreamProtocol, string> = {
+  rtsp:  'rtsp://IP:PORT/PATH',
+  rtsps: 'rtsps://IP:PORT/PATH',
+  rtmp:  '',
+}
+
+function rtmpPublishUrl(camId: string): string {
+  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
+  return `rtmp://${host}:1935/${camId}`
+}
 
 // ── Shared input style ────────────────────────────────────
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -82,6 +87,45 @@ export default function Cameras() {
     setForm(f => ({ ...f, [field]: value }))
   }
 
+  function setProtocol(protocol: StreamProtocol) {
+    setForm(f => ({
+      ...f,
+      stream_protocol: protocol,
+      cam_port: DEFAULT_PORTS[protocol],
+      rtsp_url: protocol === 'rtmp' ? '' : f.rtsp_url,
+      motion_active: protocol === 'rtmp' ? false : f.motion_active,
+    }))
+  }
+
+  const protocol = (form.stream_protocol ?? 'rtsp') as StreamProtocol
+  const isRtmp = protocol === 'rtmp'
+
+  function validateAndSubmit() {
+    setError(null)
+    if (!isRtmp) {
+      const url = (form.rtsp_url ?? '').trim()
+      if (!url) {
+        setError('Stream URL is required for RTSP/RTSPS cameras')
+        return
+      }
+      const expected = `${protocol}://`
+      if (!url.toLowerCase().startsWith(expected)) {
+        setError(`Stream URL must start with ${expected}`)
+        return
+      }
+    }
+    const payload: CameraCreate = {
+      ...form,
+      stream_protocol: protocol,
+      rtsp_url: isRtmp ? undefined : form.rtsp_url,
+    }
+    if (isEditing) {
+      updateMut.mutate({ id: form.cam_id, data: payload })
+    } else {
+      createMut.mutate(payload)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full p-4 lg:p-6 gap-5 animate-[fade-in_0.2s_ease-out]">
       {/* Header */}
@@ -119,12 +163,7 @@ export default function Cameras() {
         <form
           onSubmit={e => {
             e.preventDefault()
-            setError(null)
-            if (isEditing) {
-              updateMut.mutate({ id: form.cam_id, data: form })
-            } else {
-              createMut.mutate(form)
-            }
+            validateAndSubmit()
           }}
           className="rounded-2xl p-5 grid grid-cols-2 gap-4 shrink-0 animate-[fade-in_0.2s_ease-out]"
           style={{ background: 'oklch(0.22 0.035 260 / 0.5)', boxShadow: '0 0 0 1px var(--color-border)' }}
@@ -133,22 +172,126 @@ export default function Cameras() {
             {isEditing ? `Edit camera: ${form.cam_id}` : 'Register new camera'}
           </p>
 
-          {FIELDS.map(({ label, field, type, placeholder, required }) => (
-            <Field key={field} label={label}>
+          <Field label="Camera ID">
+            <input
+              type="text"
+              placeholder="CAMKRTVM00001"
+              required
+              disabled={isEditing}
+              value={form.cam_id}
+              onChange={e => set('cam_id', e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="Name">
+            <input
+              type="text"
+              placeholder="Main Entrance"
+              value={form.cam_name ?? ''}
+              onChange={e => set('cam_name', e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="IP Address">
+            <input
+              type="text"
+              placeholder="192.168.1.100"
+              required
+              value={form.cam_ip}
+              onChange={e => set('cam_ip', e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="Stream protocol">
+            <select
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+              value={protocol}
+              onChange={e => setProtocol(e.target.value as StreamProtocol)}
+            >
+              <option value="rtsp">RTSP (pull)</option>
+              <option value="rtsps">RTSPS (pull TLS)</option>
+              <option value="rtmp">RTMP (camera publishes)</option>
+            </select>
+          </Field>
+          {!isRtmp && (
+            <Field label={protocol === 'rtsps' ? 'RTSPS Port' : 'RTSP Port'}>
               <input
-                type={type}
-                placeholder={placeholder}
-                required={required}
-                disabled={isEditing && field === 'cam_id'}
-                value={String(form[field as keyof CameraCreate] ?? '')}
-                onChange={e => set(field, type === 'number' ? parseInt(e.target.value) || 0 : e.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                type="number"
+                placeholder={String(DEFAULT_PORTS[protocol])}
+                value={form.cam_port ?? DEFAULT_PORTS[protocol]}
+                onChange={e => set('cam_port', parseInt(e.target.value) || 0)}
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none"
                 style={inputStyle}
-                onFocus={e => (e.currentTarget.style.boxShadow = '0 0 0 1.5px oklch(0.78 0.14 200 / 0.6)')}
-                onBlur={e => (e.currentTarget.style.boxShadow = '0 0 0 1px var(--color-border)')}
               />
             </Field>
-          ))}
+          )}
+          <Field label="ONVIF Port">
+            <input
+              type="number"
+              placeholder="80"
+              value={form.onvif_port ?? 80}
+              onChange={e => set('onvif_port', parseInt(e.target.value) || 0)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          </Field>
+
+          {isRtmp ? (
+            <div className="col-span-2 rounded-lg px-3 py-2 text-xs font-mono"
+                 style={{ ...inputStyle, color: 'var(--color-muted-foreground)' }}>
+              Configure the camera/encoder to publish to:{' '}
+              <span style={{ color: 'var(--color-foreground)' }}>
+                {form.cam_id ? rtmpPublishUrl(form.cam_id) : 'rtmp://&lt;host&gt;:1935/&lt;cam_id&gt;'}
+              </span>
+            </div>
+          ) : (
+            <Field label="Stream URL">
+              <input
+                type="text"
+                placeholder={URL_PLACEHOLDERS[protocol]}
+                required
+                value={form.rtsp_url ?? ''}
+                onChange={e => set('rtsp_url', e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                style={inputStyle}
+              />
+            </Field>
+          )}
+
+          <Field label="Username">
+            <input
+              type="text"
+              placeholder="admin"
+              value={form.onvif_username ?? ''}
+              onChange={e => set('onvif_username', e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              type="password"
+              placeholder="••••••"
+              value={form.onvif_password ?? ''}
+              onChange={e => set('onvif_password', e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="Retention Days">
+            <input
+              type="number"
+              placeholder="30"
+              value={form.retention_days ?? 30}
+              onChange={e => set('retention_days', parseInt(e.target.value) || 0)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          </Field>
 
           <Field label="Organization">
             <select className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle}
@@ -174,8 +317,11 @@ export default function Cameras() {
                 checked={!!form.motion_active}
                 onChange={e => set('motion_active', e.target.checked)}
                 className="accent-primary"
+                disabled={isRtmp}
               />
-              <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>Enable motion detection</span>
+              <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>
+                Enable motion detection{isRtmp ? ' (N/A for RTMP)' : ''}
+              </span>
             </label>
             <div className="flex items-center gap-3">
               {error && <span className="text-xs" style={{ color: 'var(--color-destructive)' }}>{error}</span>}
@@ -208,13 +354,15 @@ export default function Cameras() {
               <thead>
                 <tr className="text-left text-[11px] font-medium uppercase tracking-widest"
                     style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                  {['Status', 'Camera ID', 'Name', 'IP', 'Motion', 'Last Seen', ''].map(h => (
+                  {['Status', 'Camera ID', 'Name', 'Protocol', 'IP', 'Motion', 'Last Seen', ''].map(h => (
                     <th key={h} className={`px-4 py-3 ${h === '' ? 'text-right' : 'text-left'}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {cameras.map(cam => (
+                {cameras.map(cam => {
+                  const camProto = (cam.stream_protocol ?? 'rtsp') as StreamProtocol
+                  return (
                   <tr key={cam.cam_id} className="transition-colors last:border-b-0"
                       style={{ borderBottom: '1px solid var(--color-border)' }}
                       onMouseOver={e => (e.currentTarget.style.background = 'oklch(0.28 0.03 260 / 0.4)')}
@@ -233,8 +381,12 @@ export default function Cameras() {
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                       {cam.cam_name ?? <span style={{ color: 'var(--color-dim)', fontStyle: 'italic' }}>—</span>}
                     </td>
+                    <td className="px-4 py-3 font-mono text-[10px] uppercase" style={{ color: 'var(--color-muted-foreground)' }}
+                        title={camProto === 'rtmp' ? rtmpPublishUrl(cam.cam_id) : (cam.rtsp_url ?? '')}>
+                      {camProto}
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                      {cam.cam_ip}:{cam.cam_port}
+                      {cam.cam_ip}{camProto !== 'rtmp' ? `:${cam.cam_port}` : ''}
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -259,7 +411,9 @@ export default function Cameras() {
                           setForm({
                             cam_id: cam.cam_id, cam_name: cam.cam_name ?? '',
                             cam_ip: cam.cam_ip, cam_port: cam.cam_port,
-                            onvif_port: cam.onvif_port ?? 80, rtsp_url: cam.rtsp_url ?? '',
+                            onvif_port: cam.onvif_port ?? 80,
+                            stream_protocol: camProto,
+                            rtsp_url: cam.rtsp_url ?? '',
                             onvif_username: cam.onvif_username ?? 'admin',
                             onvif_password: cam.onvif_password ?? 'admin',
                             motion_active: cam.motion_active,
@@ -287,7 +441,8 @@ export default function Cameras() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

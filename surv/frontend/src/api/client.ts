@@ -50,6 +50,7 @@ export interface Camera {
   cam_port:      number
   onvif_port?:   number | null
   rtsp_url?:     string | null
+  stream_protocol?: 'rtsp' | 'rtsps' | 'rtmp'
   onvif_username?: string | null
   onvif_password?: string | null
   is_active:     boolean
@@ -69,6 +70,7 @@ export interface CameraCreate {
   cam_port?:      number
   onvif_port?:    number
   rtsp_url?:      string
+  stream_protocol?: 'rtsp' | 'rtsps' | 'rtmp'
   onvif_username?: string
   onvif_password?: string
   motion_active?: boolean

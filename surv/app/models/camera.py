@@ -31,7 +31,11 @@ class Camera(Base):
     cam_ip         = Column(String(50),  nullable=False)
     cam_port       = Column(Integer,     default=554)
     onvif_port     = Column(Integer,     default=80)
+    # Credential-free pull URL for rtsp/rtsps (e.g. rtsp://host:554/stream1).
+    # Unused for rtmp publish mode (camera pushes to MediaMTX).
     rtsp_url       = Column(String(500), nullable=True)
+    # Ingest protocol: rtsp | rtsps | rtmp (default rtsp).
+    stream_protocol = Column(String(16), default="rtsp", nullable=False)
     onvif_username = Column(String(100), default="admin")
     onvif_password = Column(String(100), default="admin")
     camera_model   = Column(String(100), nullable=True)
