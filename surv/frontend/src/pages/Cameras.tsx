@@ -20,7 +20,7 @@ const FIELDS: {
   { label: 'IP Address', field: 'cam_ip',         type: 'text',     placeholder: '192.168.1.100', required: true },
   { label: 'RTSP Port',  field: 'cam_port',       type: 'number',   placeholder: '554' },
   { label: 'ONVIF Port', field: 'onvif_port',     type: 'number',   placeholder: '80' },
-  { label: 'RTSP URL',   field: 'rtsp_url',       type: 'text',     placeholder: 'rtsp://... (optional)' },
+  { label: 'RTSP URL',   field: 'rtsp_url',       type: 'text',     placeholder: 'rtsp://IP:PORT/PATH', required: true },
   { label: 'Username',   field: 'onvif_username', type: 'text',     placeholder: 'admin' },
   { label: 'Password',   field: 'onvif_password', type: 'password', placeholder: '••••••' },
   { label: 'Retention Days', field: 'retention_days', type: 'number', placeholder: '30' },

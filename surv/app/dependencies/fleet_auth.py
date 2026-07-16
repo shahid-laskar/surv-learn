@@ -2,16 +2,17 @@
 
 import secrets
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
 from app.models.nvr import NvrNode
 
 
 async def verify_site_token(
     site_code: str,
-    db: AsyncSession,
+    db: AsyncSession = Depends(get_db),
     x_site_token: str | None = Header(None, alias="X-Site-Token"),
 ) -> NvrNode:
     if not x_site_token:
@@ -37,7 +38,7 @@ async def verify_site_token(
 
 async def verify_site_token_body(
     site_code: str,
-    db: AsyncSession,
+    db: AsyncSession = Depends(get_db),
     x_site_token: str | None = Header(None, alias="X-Site-Token"),
 ) -> NvrNode:
     """Same as verify_site_token but site_code comes from request body field."""

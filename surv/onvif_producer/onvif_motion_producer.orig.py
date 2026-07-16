@@ -1,42 +1,12 @@
 """
 onvif_motion_producer.py
-Subscribes to ONVIF motion events from cameras (any Profile S compliant
-vendor — Matrix, TP-Link, CP Plus, Hikvision-OEM, Dahua-OEM, Axis, etc.)
-and publishes normalized events to the Kafka camera.motion topic.
+Subscribes to ONVIF motion events from cameras and publishes
+to Kafka camera.motion topic.
 
-VENDOR NOTES
-------------
-Different ONVIF stacks disagree on two things: where the "this is a
-motion event" signal lives, and what the boolean state key is called.
-
-  * Well-behaved cameras (TP-Link, CP Plus, Hikvision-OEM, Dahua-OEM,
-    Axis, ...) populate the WS-Notification <Topic> element correctly.
-    zeep deserializes it fine, and the topic looks like:
-        tns1:RuleEngine/CellMotionDetector/Motion
-        tns1:VideoSource/MotionAlarm
-    The boolean lives in a SimpleItem named "State".
-
-  * Matrix COMSEC MIDR50FL28CWS has a broken zeep deserialization for
-    <Topic> (comes back None), so we can't classify by topic for that
-    camera. Instead it puts a "Rule" SimpleItem inside the message body
-    (Rule="MotionInDefinedCells") and the boolean is named "IsMotion".
-
-Rather than hard-coding per-vendor branches, parse_motion_event() below
-tries the standard (topic-based) route first and only falls back to the
-rule-based body inspection when the topic is unusable. This means new
-Profile-S-compliant cameras work with zero code changes, and only truly
-broken stacks like Matrix need the fallback path.
-
-We deliberately do NOT treat "any State/IsMotion key we see" as a motion
-event — cameras reuse those same key names for tamper detection, line
-crossing, audio alarms, etc. We only extract state after confirming
-(via topic or rule) that the message *is* a motion event, so we don't
-generate false motion.started/ended events from unrelated analytics.
-
-Known limitation: some consumer-grade cameras (e.g. TP-Link Tapo) only
-implement a partial ONVIF profile and don't support PullPointSubscription
-at all. Those need a vendor SDK/RTSP-side motion approach instead — this
-producer only covers Profile S / event-service-compliant devices.
+Matrix COMSEC MIDR50FL28CWS sends:
+  SimpleItem Name="State" Value="true/false"
+  Topic is in the NotificationMessage envelope, not the Message element.
+  We read it directly from the raw XML.
 """
 
 import os
@@ -63,7 +33,7 @@ logging.getLogger("kafka").setLevel(logging.WARNING)
 logging.getLogger("zeep").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-# Namespaces used across ONVIF camera XML (vendor-agnostic — part of the spec)
+# Namespaces used in Matrix camera XML
 NS = {
     'tt':    'http://www.onvif.org/ver10/schema',
     'wsnt':  'http://docs.oasis-open.org/wsn/b-2',
@@ -79,33 +49,6 @@ ONVIF_PORT         = int(os.getenv("ONVIF_PORT",         "80"))
 PULL_TIMEOUT_SECS  = int(os.getenv("ONVIF_PULL_TIMEOUT", "10"))
 SUB_DURATION       = os.getenv("ONVIF_SUB_DURATION",     "PT60M")
 DISCOVERY_INTERVAL = int(os.getenv("DISCOVERY_INTERVAL_SECONDS", "60"))
-
-# ── Motion classification constants (data-driven, extend as new vendors surface) ──
-
-# Substrings that indicate a Topic is a motion topic. Lower-cased match.
-# Covers: tns1:RuleEngine/CellMotionDetector/Motion, tns1:VideoSource/MotionAlarm,
-# tns1:RuleEngine/MotionRegionDetector/Motion, etc.
-MOTION_TOPIC_KEYWORDS = (
-    "cellmotiondetector",
-    "motionregiondetector",
-    "motionalarm",
-    "motiondetector",
-)
-
-# "Rule" SimpleItem values that mean "this is a motion rule" — used only when
-# Topic is missing/unreliable (e.g. Matrix's broken zeep deserialization).
-MOTION_RULE_NAMES = {
-    "motionindefinedcells",
-    "motiondetection",
-    "motion",
-    "cellmotiondetector",
-    "motionalarm",
-    "motionregiondetector",
-}
-
-# Boolean state key names, in priority order. "State" is the ONVIF-standard
-# name used by most vendors; "IsMotion" is Matrix's non-standard variant.
-MOTION_STATE_KEYS = ("State", "IsMotion", "Motion")
 
 
 def get_kafka_producer() -> KafkaProducer:
@@ -158,82 +101,58 @@ def get_active_cameras(conn) -> list[dict]:
         return [dict(row) for row in cur.fetchall()]
 
 
-def _extract_topic(msg) -> str | None:
+def parse_state_from_message(msg) -> bool | None:
     """
-    Try to pull the WS-Notification Topic string off the message.
-    Returns None if zeep failed to deserialize it (happens on some
-    vendor stacks, e.g. Matrix) rather than guessing a default —
-    guessing was the old Matrix-only behaviour and is wrong for every
-    other camera.
+    Parse the motion state from a Matrix COMSEC ONVIF message.
+
+    The camera sends multiple event types per pull; we only care about:
+      Rule='MotionInDefinedCells'  →  IsMotion='true'|'false'
+
+    Other messages (RecordingJobToken/State, VideoSource/State) are ignored
+    so we don't generate false motion.ended events.
     """
     try:
-        if msg.Topic is not None and msg.Topic._value_1 is not None:
+        elem  = msg.Message._value_1   # lxml Element
+        items = elem.findall('.//tt:SimpleItem', NS)
+
+        item_data = {item.get('Name'): item.get('Value') for item in items}
+        log.info(f"DEBUG raw items: {item_data}")
+
+        rule = item_data.get('Rule', '')
+
+        # Only handle motion-detection rules
+        if rule in ('MotionInDefinedCells', 'MotionDetection', 'Motion', 'CellMotionDetector'):
+            # Matrix COMSEC uses IsMotion; some cameras use State
+            for key in ('IsMotion', 'State'):
+                if key in item_data:
+                    return item_data[key].lower() == 'true'
+
+        # Not a motion message — skip
+    except Exception as e:
+        log.warning(f"Failed to parse State from message: {e}")
+    return None
+
+
+
+def parse_topic_from_notification(msg) -> str:
+    """
+    Extract topic string from the raw NotificationMessage envelope.
+    Zeep deserializes Topic as None on this camera — read from _raw_elements.
+    """
+    try:
+        # Topic is in the NotificationMessage, not inside Message
+        # Try zeep first
+        if msg.Topic is not None and msg.Topic._value_1:
             return str(msg.Topic._value_1)
     except Exception:
         pass
-    return None
-
-
-def _extract_simple_items(msg) -> dict:
-    """Flatten the tt:SimpleItem Name/Value pairs out of the message body."""
-    try:
-        elem = msg.Message._value_1  # lxml Element
-        items = elem.findall('.//tt:SimpleItem', NS)
-        return {item.get('Name'): item.get('Value') for item in items}
-    except Exception as e:
-        log.warning(f"Failed to extract SimpleItems: {e}")
-        return {}
-
-
-def parse_motion_event(msg) -> tuple[bool, str] | None:
-    """
-    Universal ONVIF motion parser.
-
-    Returns (is_motion: bool, topic_or_rule: str) if this message is a
-    motion event, or None if it isn't (tamper, line-crossing, audio,
-    recording-state, etc. all get filtered out here).
-
-    Classification order:
-      1. Topic-based (standard path) — works for TP-Link, CP Plus,
-         Hikvision-OEM, Dahua-OEM, Axis, and any other compliant stack.
-      2. Rule-based fallback — only used when Topic is unusable, which
-         today means Matrix COMSEC's broken zeep deserialization.
-    """
-    item_data = _extract_simple_items(msg)
-    if not item_data:
-        return None
-
-    topic = _extract_topic(msg)
-    classified_as_motion = False
-    label = topic
-
-    if topic is not None:
-        topic_lower = topic.lower()
-        classified_as_motion = any(kw in topic_lower for kw in MOTION_TOPIC_KEYWORDS)
-    else:
-        # Topic unusable — fall back to inspecting the Rule SimpleItem.
-        rule = (item_data.get('Rule') or '').lower()
-        if rule in MOTION_RULE_NAMES:
-            classified_as_motion = True
-            label = f"rule:{rule}"
-
-    if not classified_as_motion:
-        log.debug(f"Ignoring non-motion message (topic={topic}, items={item_data})")
-        return None
-
-    for key in MOTION_STATE_KEYS:
-        if key in item_data:
-            return item_data[key].lower() == 'true', label
-
-    log.warning(f"Motion message classified but no state key found: {item_data}")
-    return None
+    return "tns1:Configuration/VideoAnalyticsConfiguration"  # Matrix default
 
 
 class ONVIFCameraProducer:
     """
     Manages ONVIF pull-point subscription for a single camera.
-    Runs in its own thread. Vendor-agnostic — any Profile S device that
-    exposes CreatePullPointSubscription / PullMessages works here.
+    Runs in its own thread.
     """
 
     def __init__(self, camera: dict, kafka: KafkaProducer):
@@ -313,24 +232,28 @@ class ONVIFCameraProducer:
                 self._process_message(msg)
 
     def _process_message(self, msg):
-        # ── Dump the raw XML so we can see what a new/unknown camera sends ──
+        # ── Dump the raw XML so we can see what the camera actually sends ──
         try:
+            from lxml import etree
             raw_elem = msg.Message._value_1
             raw_xml = etree.tostring(raw_elem, pretty_print=True).decode()
             log.debug(f"[{self.cam_path}] RAW Message XML:\n{raw_xml}")
         except Exception as dump_err:
             log.debug(f"[{self.cam_path}] Could not dump raw XML: {dump_err}")
 
+        # ── Also dump the Topic field ──
         try:
             log.debug(f"[{self.cam_path}] Topic: {msg.Topic}")
         except Exception:
             pass
 
-        result = parse_motion_event(msg)
-        if result is None:
-            return  # not a motion event — ignore
+        state = parse_state_from_message(msg)
+        log.debug(f"[{self.cam_path}] Parsed state={state}")
+        if state is None:
+            log.debug(f"[{self.cam_path}] Ignoring message — no motion State/IsMotion key")
+            return  # not a State message — ignore
 
-        state, classified_via = result
+        topic      = parse_topic_from_notification(msg)
         event_type = "motion.started" if state else "motion.ended"
 
         event = {
@@ -339,7 +262,7 @@ class ONVIFCameraProducer:
             "camera_id":      self.camera_id,
             "camera_path":    self.cam_path,
             "timestamp_utc":  datetime.now(timezone.utc).isoformat(),
-            "source_topic":   classified_via,
+            "source_topic":   topic,
             "is_motion":      state,
         }
 
@@ -351,7 +274,7 @@ class ONVIFCameraProducer:
             )
             self.kafka.flush()
             log.info(f"[{self.cam_path}] Published: {event_type} "
-                     f"(State={state}, via={classified_via})")
+                     f"(State={state})")
         except Exception as e:
             log.error(f"[{self.cam_path}] Kafka publish failed: {e}")
 
