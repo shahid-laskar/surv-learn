@@ -9,23 +9,27 @@ VENDOR NOTES
 Different ONVIF stacks disagree on two things: where the "this is a
 motion event" signal lives, and what the boolean state key is called.
 
-  * Well-behaved cameras (TP-Link, CP Plus, Hikvision-OEM, Dahua-OEM,
-    Axis, ...) populate the WS-Notification <Topic> element correctly.
-    zeep deserializes it fine, and the topic looks like:
+  * Well-behaved cameras (CP Plus, Hikvision-OEM, Dahua-OEM, Axis, ...)
+    populate the WS-Notification <Topic> element correctly. zeep
+    deserializes it fine, and the topic looks like:
         tns1:RuleEngine/CellMotionDetector/Motion
         tns1:VideoSource/MotionAlarm
     The boolean lives in a SimpleItem named "State".
 
-  * Matrix COMSEC MIDR50FL28CWS has a broken zeep deserialization for
-    <Topic> (comes back None), so we can't classify by topic for that
-    camera. Instead it puts a "Rule" SimpleItem inside the message body
-    (Rule="MotionInDefinedCells") and the boolean is named "IsMotion".
+  * Matrix COMSEC MIDR50FL28CWS and TP-Link VIGI C330I both leave Topic
+    as None after zeep deserialization. They put a "Rule" SimpleItem in
+    the message body instead (Rule="MotionInDefinedCells" /
+    "MyMotionDetectorRule") and the boolean is named "IsMotion".
 
 Rather than hard-coding per-vendor branches, parse_motion_event() below
 tries the standard (topic-based) route first and only falls back to the
-rule-based body inspection when the topic is unusable. This means new
-Profile-S-compliant cameras work with zero code changes, and only truly
-broken stacks like Matrix need the fallback path.
+rule-based body inspection when the topic is unusable.
+
+Also: python-onvif-zeep creates a PullPointSubscription during
+ONVIFCamera.__init__. Any later CreatePullPointSubscription returns a
+*different* URL (TP-Link uses a fresh high port each time). We must
+rebind cam.xaddrs before create_pullpoint_service() or PullMessages
+hits the dead init subscription.
 
 We deliberately do NOT treat "any State/IsMotion key we see" as a motion
 event — cameras reuse those same key names for tamper detection, line
@@ -93,7 +97,9 @@ MOTION_TOPIC_KEYWORDS = (
 )
 
 # "Rule" SimpleItem values that mean "this is a motion rule" — used only when
-# Topic is missing/unreliable (e.g. Matrix's broken zeep deserialization).
+# Topic is missing/unreliable (e.g. Matrix / TP-Link VIGI broken Topic
+# deserialization). Exact match first; keyword substring covers vendor-specific
+# names like TP-Link's "MyMotionDetectorRule".
 MOTION_RULE_NAMES = {
     "motionindefinedcells",
     "motiondetection",
@@ -101,11 +107,19 @@ MOTION_RULE_NAMES = {
     "cellmotiondetector",
     "motionalarm",
     "motionregiondetector",
+    "mymotiondetectorrule",
 }
+MOTION_RULE_KEYWORDS = ("motion",)
 
 # Boolean state key names, in priority order. "State" is the ONVIF-standard
-# name used by most vendors; "IsMotion" is Matrix's non-standard variant.
+# name used by most vendors; "IsMotion" is Matrix/TP-Link's non-standard variant.
 MOTION_STATE_KEYS = ("State", "IsMotion", "Motion")
+
+# NS used by python-onvif-zeep for the PullPointSubscription XAddr key.
+# ONVIFCamera.__init__ already creates one subscription and stores its address
+# here; if we CreatePullPointSubscription again we MUST overwrite this before
+# create_pullpoint_service(), or PullMessages hits a stale/dead endpoint.
+PULLPOINT_NS = "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
 
 
 def get_kafka_producer() -> KafkaProducer:
@@ -161,14 +175,13 @@ def get_active_cameras(conn) -> list[dict]:
 def _extract_topic(msg) -> str | None:
     """
     Try to pull the WS-Notification Topic string off the message.
-    Returns None if zeep failed to deserialize it (happens on some
-    vendor stacks, e.g. Matrix) rather than guessing a default —
-    guessing was the old Matrix-only behaviour and is wrong for every
-    other camera.
+    Returns None if zeep failed to deserialize it (happens on Matrix and
+    TP-Link VIGI) rather than guessing a default.
     """
     try:
         if msg.Topic is not None and msg.Topic._value_1 is not None:
-            return str(msg.Topic._value_1)
+            topic = str(msg.Topic._value_1).strip()
+            return topic or None
     except Exception:
         pass
     return None
@@ -185,6 +198,15 @@ def _extract_simple_items(msg) -> dict:
         return {}
 
 
+def _is_motion_rule(rule: str) -> bool:
+    """True if a Rule SimpleItem value identifies a motion detector."""
+    if not rule:
+        return False
+    if rule in MOTION_RULE_NAMES:
+        return True
+    return any(kw in rule for kw in MOTION_RULE_KEYWORDS)
+
+
 def parse_motion_event(msg) -> tuple[bool, str] | None:
     """
     Universal ONVIF motion parser.
@@ -194,10 +216,9 @@ def parse_motion_event(msg) -> tuple[bool, str] | None:
     recording-state, etc. all get filtered out here).
 
     Classification order:
-      1. Topic-based (standard path) — works for TP-Link, CP Plus,
-         Hikvision-OEM, Dahua-OEM, Axis, and any other compliant stack.
-      2. Rule-based fallback — only used when Topic is unusable, which
-         today means Matrix COMSEC's broken zeep deserialization.
+      1. Topic-based (standard path) — Profile-S cameras with a usable Topic.
+      2. Rule-based fallback — Topic missing/unusable (Matrix COMSEC,
+         TP-Link VIGI C330I, etc.).
     """
     item_data = _extract_simple_items(msg)
     if not item_data:
@@ -213,7 +234,7 @@ def parse_motion_event(msg) -> tuple[bool, str] | None:
     else:
         # Topic unusable — fall back to inspecting the Rule SimpleItem.
         rule = (item_data.get('Rule') or '').lower()
-        if rule in MOTION_RULE_NAMES:
+        if _is_motion_rule(rule):
             classified_as_motion = True
             label = f"rule:{rule}"
 
@@ -227,6 +248,30 @@ def parse_motion_event(msg) -> tuple[bool, str] | None:
 
     log.warning(f"Motion message classified but no state key found: {item_data}")
     return None
+
+
+def _subscription_address(sub) -> str:
+    addr = sub.SubscriptionReference.Address
+    return str(getattr(addr, '_value_1', addr))
+
+
+def _bind_pullpoint_service(cam: ONVIFCamera, sub) -> object:
+    """
+    Point PullMessages at the subscription we just created.
+
+    python-onvif-zeep's ONVIFCamera.update_xaddrs() already opens a pull-point
+    during __init__. CreatePullPointSubscription() then opens a *second* one
+    with a different URL (TP-Link VIGI uses a fresh high port each time).
+    create_pullpoint_service() reads cam.xaddrs[PULLPOINT_NS], so without this
+    rebind PullMessages hits the dead init subscription and the camera resets
+    the TCP connection.
+    """
+    cam.xaddrs[PULLPOINT_NS] = _subscription_address(sub)
+    with cam.services_lock:
+        cam.services.pop('pullpoint', None)
+        if hasattr(cam, 'pullpoint'):
+            delattr(cam, 'pullpoint')
+    return cam.create_pullpoint_service()
 
 
 class ONVIFCameraProducer:
@@ -274,25 +319,36 @@ class ONVIFCameraProducer:
         cam    = ONVIFCamera(self.cam_ip, self.port, self.username, self.password)
         events = cam.create_events_service()
 
+        # Create our own subscription (with controlled duration), then rebind
+        # pullpoint XAddr. ONVIFCamera.__init__ already opened one during
+        # update_xaddrs(); without rebinding, PullMessages hits that stale
+        # URL (TP-Link VIGI: connection reset / no events).
         sub = events.CreatePullPointSubscription({
             'InitialTerminationTime': SUB_DURATION,
         })
-        log.info(f"[{self.cam_path}] ONVIF subscription created (duration: {SUB_DURATION})")
+        svc = _bind_pullpoint_service(cam, sub)
+        log.info(
+            f"[{self.cam_path}] ONVIF subscription created "
+            f"(duration: {SUB_DURATION}, pullpoint: {cam.xaddrs.get(PULLPOINT_NS)})"
+        )
 
-        svc          = cam.create_pullpoint_service()
         sub_start    = time.time()
         renewal_secs = 50 * 60  # renew at 50 min, before the 60 min expiry
 
         while not self._stop.is_set():
 
-            # Renew subscription before it expires
+            # Renew subscription before it expires — must rebind pullpoint URL
             if time.time() - sub_start > renewal_secs:
                 try:
-                    events.CreatePullPointSubscription({
+                    sub = events.CreatePullPointSubscription({
                         'InitialTerminationTime': SUB_DURATION,
                     })
+                    svc = _bind_pullpoint_service(cam, sub)
                     sub_start = time.time()
-                    log.info(f"[{self.cam_path}] Subscription renewed")
+                    log.info(
+                        f"[{self.cam_path}] Subscription renewed "
+                        f"(pullpoint: {cam.xaddrs.get(PULLPOINT_NS)})"
+                    )
                 except Exception as e:
                     log.warning(f"[{self.cam_path}] Renewal failed: {e}")
 
