@@ -51,6 +51,12 @@ class Camera(Base):
     # ── Retention ──────────────────────────────────────────────────────────
     retention_days = Column(Integer, nullable=True)  # NULL → use global RETENTION_DAYS env
 
+    # ── Recording mode ─────────────────────────────────────────────────────
+    # 'full' = 24/7 continuous  |  'motion_only' = keep only motion+guard segments
+    recording_mode          = Column(String(20), nullable=False, default="full")
+    motion_pre_guard_secs   = Column(Integer,    nullable=False, default=60)
+    motion_post_guard_secs  = Column(Integer,    nullable=False, default=60)
+
     # ── Edge NVR ───────────────────────────────────────────────────────────
     nvr_node_id    = Column(Integer, ForeignKey("nvr_node.id"), nullable=True)
 
@@ -96,6 +102,9 @@ class VideoSegment(Base):
     segment_end      = Column(DateTime(timezone=True), nullable=True)
     duration_seconds = Column(Integer,     nullable=True)
     file_size_bytes  = Column(BigInteger,  nullable=True)
+    # 'full' | 'motion' | 'guard'
+    recording_type   = Column(String(20),  nullable=False, default="full")
+    has_motion       = Column(Boolean,     nullable=False, default=False)
     deleted_at       = Column(DateTime(timezone=True), nullable=True)
     created_at       = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -103,6 +112,7 @@ class VideoSegment(Base):
 
     __table_args__ = (
         Index("ix_video_segment_camera_start", "camera_id", "segment_start"),
+        Index("ix_video_segment_camera_type",  "camera_id", "recording_type"),
     )
 
 

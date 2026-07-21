@@ -30,6 +30,9 @@ MINIO_PASS = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin123")
 BUCKET = os.getenv("MINIO_BUCKET_RECORDINGS", "recordings")
 GLOBAL_RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "30"))
 INTERVAL_HOURS = int(os.getenv("CLEANER_RUN_INTERVAL_HOURS", "6"))
+# For motion_only cameras: how long to keep 'full'-typed (non-motion) segments
+MOTION_FULL_RETENTION_DAYS = int(os.getenv("MOTION_FULL_RETENTION_DAYS", "2"))
+
 
 
 def get_db_connection():
@@ -135,26 +138,93 @@ def clean_old_recordings(s3, conn):
     log.info(f"Cleanup cycle complete. Deleted {total_deleted} segments globally.")
 
 
+def clean_motion_only_full_segments(s3, conn):
+    """
+    For cameras in 'motion_only' mode, delete 'full'-typed segments older than
+    MOTION_FULL_RETENTION_DAYS. Motion and guard segments keep their full retention.
+    """
+    log.info("Starting motion-only full-segment cleanup...")
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=MOTION_FULL_RETENTION_DAYS)
+    total_deleted = 0
+
+    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        cur.execute(
+            "SELECT id, cam_id FROM survapp_camera_master "
+            "WHERE recording_mode = 'motion_only' AND is_active = true"
+        )
+        motion_cameras = cur.fetchall()
+
+    for cam in motion_cameras:
+        cam_db_id  = cam["id"]
+        cam_id_str = cam["cam_id"]
+
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """SELECT id, object_key FROM survapp_video_segment
+                   WHERE camera_id = %s
+                     AND recording_type = 'full'
+                     AND segment_start < %s
+                     AND deleted_at IS NULL""",
+                (cam_db_id, cutoff)
+            )
+            expired = cur.fetchall()
+
+        if not expired:
+            continue
+
+        log.info(
+            f"motion_only camera {cam_id_str}: {len(expired)} full segments "
+            f"older than {MOTION_FULL_RETENTION_DAYS} days to delete"
+        )
+
+        objects_to_delete = [{"Key": row["object_key"]} for row in expired]
+        chunk_size = 1000
+        for i in range(0, len(objects_to_delete), chunk_size):
+            chunk = objects_to_delete[i:i + chunk_size]
+            try:
+                s3.delete_objects(
+                    Bucket=BUCKET,
+                    Delete={"Objects": chunk, "Quiet": True}
+                )
+            except ClientError as e:
+                log.error(f"Error deleting full-segment chunk for {cam_id_str}: {e}")
+                continue
+
+            deleted_ids = [row["id"] for row in expired[i:i + chunk_size]]
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE survapp_video_segment SET deleted_at = NOW() WHERE id = ANY(%s)",
+                    (deleted_ids,)
+                )
+            conn.commit()
+            total_deleted += len(chunk)
+
+    log.info(f"Motion-only full-segment cleanup done. Deleted {total_deleted} segments.")
+
+
 def main():
     log.info(f"MinIO cleaner starting. Interval: {INTERVAL_HOURS} hours.")
-    
+
     while True:
         try:
             s3 = get_s3_client()
             apply_minio_lifecycle_policy(s3)
-            
+
             with get_db_connection() as conn:
                 clean_old_recordings(s3, conn)
-                
+                clean_motion_only_full_segments(s3, conn)
+
         except psycopg2.OperationalError as e:
             log.error(f"Database error: {e}")
         except ClientError as e:
             log.error(f"S3/MinIO error: {e}")
         except Exception as e:
             log.error(f"Unexpected error in cleaner: {e}")
-            
+
         time.sleep(INTERVAL_HOURS * 3600)
 
 
 if __name__ == "__main__":
     main()
+

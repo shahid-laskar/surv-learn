@@ -21,6 +21,7 @@ MINIO_ACCESS_KEY      = os.getenv("MINIO_ACCESS_KEY",       "minioadmin")
 MINIO_SECRET_KEY      = os.getenv("MINIO_SECRET_KEY",       "minioadmin123")
 MINIO_BUCKET          = os.getenv("MINIO_BUCKET",           "recordings")
 SEGMENT_DURATION_SECS = int(os.getenv("SEGMENT_DURATION_SECONDS", "60"))
+LOCAL_CLEANUP_ENABLED = os.getenv("LOCAL_CLEANUP_ENABLED", "true").lower() == "true"
 
 
 def parse_segment_start(filepath: Path) -> datetime | None:
@@ -156,6 +157,37 @@ def publish_segment_event(filepath: Path, object_name: str,
     except Exception as e:
         # Kafka failure must never block the upload — log and continue
         logger.warning(f"Kafka publish failed (non-fatal): {e}")
+def verify_and_delete_local(client: Minio, filepath: Path, object_name: str) -> None:
+    """
+    Verify the uploaded object exists in MinIO with a matching size,
+    then delete the local file.  If verification fails, the file is kept
+    and an error is logged — no silent data loss.
+    """
+    if not LOCAL_CLEANUP_ENABLED:
+        logger.info(f"Local cleanup disabled — keeping {filepath}")
+        return
+
+    try:
+        local_size = filepath.stat().st_size
+        stat = client.stat_object(MINIO_BUCKET, object_name)
+        remote_size = stat.size
+
+        if remote_size != local_size:
+            logger.error(
+                f"Size mismatch for {object_name}: "
+                f"local={local_size} remote={remote_size} — keeping local file"
+            )
+            return
+
+        filepath.unlink()
+        logger.info(f"Local file deleted after verified upload: {filepath}")
+
+    except Exception as e:
+        logger.error(
+            f"Cleanup verification failed for {filepath} — keeping local file: {e}"
+        )
+
+
 def main():
     if len(sys.argv) < 2:
         logger.error("Usage: upload_to_minio.py <filepath>")
@@ -178,6 +210,7 @@ def main():
     object_name   = upload_segment(client, filepath)
     upload_metadata(client, filepath, object_name, segment_start)
     publish_segment_event(filepath, object_name, segment_start)
+    verify_and_delete_local(client, filepath, object_name)
 
 
 if __name__ == "__main__":

@@ -136,13 +136,21 @@ export default function Health() {
           </div>
         </div>
 
-        {/* Storage */}
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold flex items-center gap-2"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--color-foreground)' }}>
-            <Server size={15} style={{ color: 'var(--color-primary)' }} />
-            Storage
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold flex items-center gap-2"
+                style={{ fontFamily: 'var(--font-display)', color: 'var(--color-foreground)' }}>
+              <Server size={15} style={{ color: 'var(--color-primary)' }} />
+              Storage
+            </h2>
+            {import.meta.env.VITE_MINIO_CONSOLE_URL && (
+              <a href={import.meta.env.VITE_MINIO_CONSOLE_URL} target="_blank" rel="noreferrer"
+                 className="text-[11px] font-medium transition-colors px-2 py-1 rounded-md"
+                 style={{ background: 'oklch(0.28 0.03 260 / 0.5)', color: 'var(--color-primary)', boxShadow: '0 0 0 1px var(--color-border)' }}>
+                 Open MinIO Console
+              </a>
+            )}
+          </div>
           {storage ? (
             <div className="space-y-3">
               {storage.buckets.map(b => (

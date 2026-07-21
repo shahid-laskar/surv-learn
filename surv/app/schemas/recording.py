@@ -9,6 +9,9 @@ class SegmentOut(BaseModel):
     duration_seconds: Optional[int]
     file_size_bytes:  Optional[int] = None
     playback_url:     str
+    object_key:       str
+    recording_type:   str = "full"   # 'full' | 'motion' | 'guard'
+    has_motion:       bool = False
 
 class TimelineOut(BaseModel):
     camera_id:      str

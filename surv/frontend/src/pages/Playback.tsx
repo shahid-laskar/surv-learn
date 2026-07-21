@@ -44,6 +44,7 @@ export default function Playback() {
   const [dateStart, setDateStart] = useState(today)
   const [dateEnd, setDateEnd]     = useState(today)
   const [seg, setSeg]             = useState<Segment | null>(null)
+  const [typeFilter, setTypeFilter] = useState<'all' | 'motion' | 'guard' | 'full'>('all')
   const [playbackPosition, setPlaybackPosition] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
   const [panelOpen, setPanelOpen] = useState(() => localStorage.getItem('playback-panel') !== 'closed')
@@ -90,8 +91,12 @@ export default function Playback() {
   }, [timelineQueries])
 
   const chronologicalSegments = useMemo(
-    () => [...allSegments].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()),
-    [allSegments],
+    () => {
+      const sorted = [...allSegments].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+      if (typeFilter === 'all') return sorted
+      return sorted.filter(s => s.recording_type === typeFilter)
+    },
+    [allSegments, typeFilter],
   )
 
   const segRef = useRef(seg)
@@ -103,8 +108,6 @@ export default function Playback() {
     () => [...chronologicalSegments].reverse(),
     [chronologicalSegments],
   )
-
-  const totalSegments = timelineQueries.reduce((n, q) => n + (q.data?.total_segments ?? 0), 0)
 
   const rangeStartMs = new Date(`${dateStart}T00:00:00Z`).getTime()
   const rangeEndMs = new Date(`${dateEnd}T00:00:00Z`).getTime() + 86_400_000
@@ -493,9 +496,14 @@ export default function Playback() {
                 <div className="px-4 py-2 flex justify-between items-center shrink-0"
                      style={{ borderTop: '1px solid var(--color-border)' }}>
                   <span className="text-[11px] font-medium" style={{ color: 'var(--color-foreground)' }}>Segments</span>
-                  <span className="font-mono text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
-                    {totalSegments}
-                  </span>
+                  <div className="flex bg-black/20 rounded-md p-0.5">
+                    {(['all', 'motion', 'guard', 'full'] as const).map(t => (
+                      <button key={t} onClick={() => setTypeFilter(t)}
+                        className={`text-[9px] uppercase tracking-wider px-2 py-1 rounded transition-colors ${typeFilter === t ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-muted-foreground)] hover:text-white'}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="overflow-y-auto flex-1 min-h-0">
                   <table className="w-full text-xs border-collapse">
@@ -522,15 +530,35 @@ export default function Playback() {
                           <td className="px-3 py-1.5 font-mono text-[11px]" style={{ color: 'var(--color-foreground)' }}>
                             {format(new Date(s.start), 'HH:mm:ss')}
                           </td>
-                          <td className="px-2 py-1.5 text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                          <td className="px-2 py-1.5 text-[11px]">
+                            <span className="px-1.5 py-0.5 rounded-sm font-mono text-[9px]"
+                                  style={{
+                                    background: s.recording_type === 'motion' ? 'rgba(239,68,68,0.2)' :
+                                               s.recording_type === 'guard' ? 'rgba(234,179,8,0.2)' : 'rgba(255,255,255,0.05)',
+                                    color: s.recording_type === 'motion' ? '#fca5a5' :
+                                           s.recording_type === 'guard' ? '#fde047' : 'var(--color-muted-foreground)'
+                                  }}>
+                              {s.recording_type.substring(0, 1).toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1.5 text-[11px] text-right" style={{ color: 'var(--color-muted-foreground)' }}>
                             {s.duration_seconds ?? '—'}s
                           </td>
-                          <td className="px-3 py-1.5 text-right">
+                          <td className="px-3 py-1.5 text-right flex justify-end gap-2">
+                            {import.meta.env.VITE_MINIO_CONSOLE_URL && (
+                              <a href={`${import.meta.env.VITE_MINIO_CONSOLE_URL}/browser/recordings/${s.object_key}`} target="_blank" rel="noreferrer"
+                                 onClick={e => e.stopPropagation()}
+                                 className="transition-colors"
+                                 style={{ color: 'var(--color-muted-foreground)' }}
+                                 title="View in MinIO">
+                                <HardDrive size={11} />
+                              </a>
+                            )}
                             <a href={s.playback_url} download
                                onClick={e => e.stopPropagation()}
                                className="transition-colors"
                                style={{ color: 'var(--color-primary)' }}
-                               aria-label="Download segment">
+                               title="Download segment">
                               <Download size={11} />
                             </a>
                           </td>

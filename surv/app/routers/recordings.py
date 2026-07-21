@@ -20,6 +20,7 @@ router = APIRouter(prefix="/recordings", tags=["recordings"])
 async def get_timeline(
     cam_id: str,
     date:   str = Query(..., example="2026-06-27", description="YYYY-MM-DD"),
+    type:   str = Query(None, description="Filter by recording_type: full | motion | guard"),
     db:     AsyncSession = Depends(get_db),
     user:   CurrentUser = Depends(require_permission("camera.playback")),
 ):
@@ -36,7 +37,7 @@ async def get_timeline(
 
     day_end = day_start + timedelta(days=1)
 
-    seg_result = await db.execute(
+    q = (
         select(VideoSegment)
         .where(VideoSegment.camera_id == cam.id)
         .where(VideoSegment.segment_start >= day_start)
@@ -44,6 +45,10 @@ async def get_timeline(
         .where(VideoSegment.deleted_at    == None)   # noqa: E711
         .order_by(VideoSegment.segment_start)
     )
+    if type in ("full", "motion", "guard"):
+        q = q.where(VideoSegment.recording_type == type)
+
+    seg_result = await db.execute(q)
     segments = seg_result.scalars().all()
 
     out: List[SegmentOut] = []
@@ -60,6 +65,9 @@ async def get_timeline(
             duration_seconds=seg.duration_seconds,
             file_size_bytes=seg.file_size_bytes,
             playback_url=url,
+            object_key=seg.object_key,
+            recording_type=seg.recording_type or "full",
+            has_motion=seg.has_motion or False,
         ))
 
     return TimelineOut(
@@ -68,6 +76,7 @@ async def get_timeline(
         total_segments=len(out),
         segments=out,
     )
+
 
 
 @router.get("/{cam_id}/download")

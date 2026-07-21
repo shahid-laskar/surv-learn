@@ -7,3 +7,8 @@ vpn.sarvanetra.bsnl.co.in:443 {
     tls /certs/star_bsnl_co_in.crt /certs/star_bsnl_co_in.key
     reverse_proxy headscale:8080
 }
+
+minio.sarvanetra.bsnl.co.in:443 {
+    tls /certs/star_bsnl_co_in.crt /certs/star_bsnl_co_in.key
+    reverse_proxy minio:9001
+}

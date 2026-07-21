@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import time
+from datetime import datetime, timezone, timedelta
 import psycopg2
 import psycopg2.extras
 from kafka import KafkaConsumer
@@ -36,47 +37,137 @@ def get_db_connection():
     return psycopg2.connect(DB_URL)
 
 
-def get_camera_id(conn, camera_path: str) -> int | None:
-    with conn.cursor() as cur:
+def get_camera_info(conn, camera_path: str) -> dict | None:
+    """Return camera id, recording_mode, and guard secs (None if not found)."""
+    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         cur.execute(
-            "SELECT id FROM survapp_camera_master WHERE cam_id = %s AND is_active = true",
+            """SELECT id, recording_mode, motion_pre_guard_secs, motion_post_guard_secs
+               FROM survapp_camera_master
+               WHERE cam_id = %s AND is_active = true""",
             (camera_path,)
         )
         row = cur.fetchone()
-    return row[0] if row else None
+    return dict(row) if row else None
 
 
-def insert_segment(conn, camera_id: int, event: dict) -> bool:
+def classify_segment(
+    conn,
+    camera_id: int,
+    seg_start: datetime,
+    seg_end: datetime,
+    pre_guard_secs: int,
+    post_guard_secs: int,
+) -> tuple[str, bool]:
     """
-    Insert a VideoSegment row. Returns True if inserted, False if duplicate.
-    ON CONFLICT DO NOTHING handles the case where the same segment file
-    triggers the hook twice (e.g. after a container restart).
+    Return (recording_type, has_motion) by checking overlap with motion events.
+
+    recording_type:
+      'motion' -- segment overlaps a motion event
+      'guard'  -- segment is within pre/post guard window of a motion event
+      'full'   -- no relation to motion
     """
+    # Expand window by guard secs to find adjacent motion events too
+    guard_window_start = seg_start - timedelta(seconds=pre_guard_secs)
+    guard_window_end   = seg_end   + timedelta(seconds=post_guard_secs)
+
+    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        cur.execute(
+            """SELECT motion_start, motion_end FROM survapp_motion_event
+               WHERE camera_id = %s
+                 AND is_active = false
+                 AND motion_start < %s
+                 AND (motion_end IS NULL OR motion_end > %s)""",
+            (camera_id, guard_window_end, guard_window_start)
+        )
+        events = cur.fetchall()
+
+    if not events:
+        return "full", False
+
+    for ev in events:
+        m_start = ev["motion_start"]
+        m_end   = ev["motion_end"] or (m_start + timedelta(minutes=1))
+
+        # Ensure timezone-aware comparison
+        if m_start.tzinfo is None:
+            m_start = m_start.replace(tzinfo=timezone.utc)
+        if m_end.tzinfo is None:
+            m_end = m_end.replace(tzinfo=timezone.utc)
+
+        # Direct overlap -> motion segment
+        if seg_start < m_end and seg_end > m_start:
+            return "motion", True
+
+    # No direct overlap but within guard window -> guard segment
+    return "guard", False
+
+
+def insert_segment(conn, camera_id: int, event: dict,
+                   recording_mode: str = "full",
+                   pre_guard_secs: int = 60,
+                   post_guard_secs: int = 60) -> bool:
+    """
+    Insert a VideoSegment row with motion-tagging. Returns True if inserted.
+    ON CONFLICT updates recording_type/has_motion so re-deliveries self-correct.
+    """
+    seg_start_str = event.get("segment_start_utc")
+    seg_end_str   = event.get("segment_end_utc")
+
+    # Parse timestamps for motion classification
+    try:
+        seg_start = datetime.fromisoformat(seg_start_str).replace(tzinfo=timezone.utc) \
+            if seg_start_str else None
+        seg_end   = datetime.fromisoformat(seg_end_str).replace(tzinfo=timezone.utc) \
+            if seg_end_str else None
+    except (ValueError, TypeError):
+        seg_start = seg_end = None
+
+    # Classify segment type
+    recording_type = "full"
+    has_motion     = False
+
+    if seg_start and seg_end:
+        recording_type, has_motion = classify_segment(
+            conn, camera_id, seg_start, seg_end,
+            pre_guard_secs, post_guard_secs
+        )
+        log.info(
+            f"Segment {event.get('object_key')} classified as "
+            f"'{recording_type}' (has_motion={has_motion})"
+        )
+
     with conn.cursor() as cur:
         cur.execute("""
             INSERT INTO survapp_video_segment
               (camera_id, object_key, bucket,
                segment_start, segment_end,
                duration_seconds, file_size_bytes,
+               recording_type, has_motion,
                created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-            ON CONFLICT (object_key) DO NOTHING
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (object_key) DO UPDATE
+              SET recording_type = EXCLUDED.recording_type,
+                  has_motion     = EXCLUDED.has_motion
+            RETURNING (xmax = 0) AS was_inserted
         """, (
             camera_id,
             event.get("object_key"),
             event.get("bucket", "recordings"),
-            event.get("segment_start_utc"),
-            event.get("segment_end_utc"),
+            seg_start_str,
+            seg_end_str,
             event.get("duration_seconds"),
             event.get("file_size_bytes"),
+            recording_type,
+            has_motion,
         ))
-        inserted = cur.rowcount > 0
+        row = cur.fetchone()
+        inserted = row[0] if row else False
     conn.commit()
     return inserted
 
 
 def wait_for_db(max_retries: int = 10, delay: int = 5) -> psycopg2.extensions.connection:
-    """Retry DB connection on startup — postgres may not be ready yet."""
+    """Retry DB connection on startup -- postgres may not be ready yet."""
     for attempt in range(1, max_retries + 1):
         try:
             conn = get_db_connection()
@@ -93,7 +184,7 @@ def main():
     conn     = wait_for_db()
     consumer = get_consumer()
 
-    log.info("Subscribed to recording.segments — waiting for events...")
+    log.info("Subscribed to recording.segments -- waiting for events...")
 
     for msg in consumer:
         event = msg.value
@@ -107,30 +198,35 @@ def main():
                 log.warning(f"Invalid segment event (missing camera_path or object_key): {event}")
                 continue
 
-            camera_id = get_camera_id(conn, camera_path)
-            if camera_id is None:
+            cam_info = get_camera_info(conn, camera_path)
+            if cam_info is None:
                 log.warning(
-                    f"No active camera found for path '{camera_path}' — "
+                    f"No active camera found for path '{camera_path}' -- "
                     f"register the camera via POST /api/v1/cameras/ first"
                 )
                 continue
 
-            inserted = insert_segment(conn, camera_id, event)
-            if inserted:
-                log.info(
-                    f"Segment inserted: {object_key} "
-                    f"(camera_id={camera_id}, "
-                    f"start={event.get('segment_start_utc')})"
-                )
-            else:
-                log.debug(f"Duplicate segment skipped: {object_key}")
+            inserted = insert_segment(
+                conn,
+                cam_info["id"],
+                event,
+                recording_mode=cam_info.get("recording_mode", "full"),
+                pre_guard_secs=cam_info.get("motion_pre_guard_secs", 60),
+                post_guard_secs=cam_info.get("motion_post_guard_secs", 60),
+            )
+            action = "inserted" if inserted else "re-tagged"
+            log.info(
+                f"Segment {action}: {object_key} "
+                f"(camera_id={cam_info['id']}, "
+                f"start={event.get('segment_start_utc')})"
+            )
 
         except psycopg2.OperationalError:
-            log.error("DB connection lost — reconnecting...")
+            log.error("DB connection lost -- reconnecting...")
             try:
                 conn = wait_for_db(max_retries=5, delay=3)
             except RuntimeError:
-                log.error("Could not reconnect to DB — skipping message")
+                log.error("Could not reconnect to DB -- skipping message")
         except Exception as e:
             log.error(f"Error processing segment event: {e} | event={event}")
 

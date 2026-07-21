@@ -59,6 +59,9 @@ export interface Camera {
   last_seen:     string | null
   created_at:    string
   retention_days: number | null
+  recording_mode: string
+  motion_pre_guard_secs: number
+  motion_post_guard_secs: number
   organization_id?: number | null
   customer_id?: number | null
 }
@@ -75,6 +78,9 @@ export interface CameraCreate {
   onvif_password?: string
   motion_active?: boolean
   retention_days?: number
+  recording_mode?: string
+  motion_pre_guard_secs?: number
+  motion_post_guard_secs?: number
   organization_id?: number
   customer_id?:     number
 }
@@ -95,6 +101,9 @@ export interface Segment {
   duration_seconds: number | null
   file_size_bytes?: number | null
   playback_url:     string
+  object_key:       string
+  recording_type:   string
+  has_motion:       boolean
 }
 
 export interface Timeline {

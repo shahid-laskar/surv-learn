@@ -24,6 +24,9 @@ class CameraCreate(BaseModel):
     manufacturer:   Optional[str] = None
     motion_active:  bool = True
     retention_days: Optional[int] = None
+    recording_mode:         str = "full"   # 'full' | 'motion_only'
+    motion_pre_guard_secs:  int = 60
+    motion_post_guard_secs: int = 60
 
 class CameraUpdate(BaseModel):
     cam_name:       Optional[str] = None
@@ -44,6 +47,9 @@ class CameraUpdate(BaseModel):
     motion_active:  Optional[bool] = None
     is_active:      Optional[bool] = None
     retention_days: Optional[int] = None
+    recording_mode:         Optional[str] = None
+    motion_pre_guard_secs:  Optional[int] = None
+    motion_post_guard_secs: Optional[int] = None
 
 class CameraOut(BaseModel):
     id:           int
@@ -67,6 +73,9 @@ class CameraOut(BaseModel):
     is_online:    bool
     motion_active: bool
     retention_days: Optional[int]
+    recording_mode:         str
+    motion_pre_guard_secs:  int
+    motion_post_guard_secs: int
     last_seen:    Optional[datetime]
     created_at:   datetime
 

@@ -304,6 +304,7 @@ services:
       MINIO_BUCKET:             recordings
       SEGMENT_DURATION_SECONDS: ${SEGMENT_DURATION_SECONDS}
       KAFKA_BOOTSTRAP_SERVERS:  surv_kafka:9092
+      LOCAL_CLEANUP_ENABLED:    "true"
     networks:
       - surv_net
     ports:
@@ -526,6 +527,7 @@ services:
       MINIO_ROOT_PASSWORD:          ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET_RECORDINGS:      ${MINIO_BUCKET_RECORDINGS:-recordings}
       RETENTION_DAYS:               ${RETENTION_DAYS:-30}
+      MOTION_FULL_RETENTION_DAYS:   ${MOTION_FULL_RETENTION_DAYS:-2}
       CLEANER_RUN_INTERVAL_HOURS:   "6"
     depends_on:
       postgres:

@@ -12,6 +12,7 @@ const EMPTY: CameraCreate = {
   stream_protocol: 'rtsp',
   onvif_username: 'admin', onvif_password: 'admin',
   motion_active: true, retention_days: 30,
+  recording_mode: 'full', motion_pre_guard_secs: 60, motion_post_guard_secs: 60,
 }
 
 const DEFAULT_PORTS: Record<StreamProtocol, number> = {
@@ -310,6 +311,39 @@ export default function Cameras() {
             </select>
           </Field>
 
+          <Field label="Recording Mode">
+            <select className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle}
+              value={form.recording_mode ?? 'full'}
+              onChange={e => set('recording_mode', e.target.value)}>
+              <option value="full">24/7 Continuous (Full)</option>
+              <option value="motion_only">Motion Only</option>
+            </select>
+          </Field>
+          {form.recording_mode === 'motion_only' && (
+            <>
+              <Field label="Pre-Motion Guard (s)">
+                <input
+                  type="number"
+                  placeholder="60"
+                  value={form.motion_pre_guard_secs ?? 60}
+                  onChange={e => set('motion_pre_guard_secs', parseInt(e.target.value) || 0)}
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="Post-Motion Guard (s)">
+                <input
+                  type="number"
+                  placeholder="60"
+                  value={form.motion_post_guard_secs ?? 60}
+                  onChange={e => set('motion_post_guard_secs', parseInt(e.target.value) || 0)}
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  style={inputStyle}
+                />
+              </Field>
+            </>
+          )}
+
           <div className="col-span-2 flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -420,6 +454,9 @@ export default function Cameras() {
                             organization_id: cam.organization_id ?? undefined,
                             customer_id: cam.customer_id ?? undefined,
                             retention_days: cam.retention_days ?? 30,
+                            recording_mode: cam.recording_mode ?? 'full',
+                            motion_pre_guard_secs: cam.motion_pre_guard_secs ?? 60,
+                            motion_post_guard_secs: cam.motion_post_guard_secs ?? 60,
                           })
                           setIsEditing(true); setShowForm(true); setError(null)
                         }}
