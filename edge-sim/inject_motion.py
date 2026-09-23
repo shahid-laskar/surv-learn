@@ -34,9 +34,10 @@ except ImportError:
     raise
 
 # ── Config ────────────────────────────────────────────────────────────────────
+_db_host = os.environ.get("HUB_HOST", os.environ.get("HOST_IP", "localhost"))
 DB_URL = os.environ.get(
     "SYNC_DATABASE_URL",
-    "postgresql://surv:surv1234@10.44.0.209:5432/sarvanetra"
+    os.environ.get("DATABASE_URL", f"postgresql://surv:surv1234@{_db_host}:5432/sarvanetra")
 )
 
 SIMULATED_CAMERAS = [

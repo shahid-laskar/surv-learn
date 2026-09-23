@@ -4,16 +4,15 @@
 logLevel: info
 logDestinations: [stdout]
 
-authMethod: internal
-authInternalUsers:
-  - user: any
-    pass:
-    ips: []
-    permissions:
-      - action: api
-      - action: publish
-      - action: read
-      - action: playback
+# ── Authentication ──────────────────────────────────────────────────────────
+# In multi-site deployments, Edge MediaMTX authenticates viewer read/playback
+# requests against the Hub's stream auth webhook over the overlay/LAN network.
+authMethod: http
+authHTTPAddress: http://host.docker.internal:8000/api/v1/auth/stream
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
 
 api: true
 apiAddress: :9997

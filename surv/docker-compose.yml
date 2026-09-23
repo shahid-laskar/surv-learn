@@ -10,6 +10,7 @@ volumes:
   minio_data:
   headscale_data:
   caddy_data:
+  hub_ts_state:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # INFRASTRUCTURE
@@ -64,6 +65,29 @@ services:
     ports:
       - "3478:3478/udp"
       - "8443:443"
+
+  tailscale:
+    profiles: ["vpn"]
+    image: tailscale/tailscale:latest
+    container_name: surv_tailscale
+    hostname: sarvanetra-hub
+    environment:
+      TS_AUTHKEY: ${HUB_PREAUTH_KEY:-}
+      TS_EXTRA_ARGS: --login-server=https://${HEADSCALE_DOMAIN} --accept-routes
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - hub_ts_state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      - surv_net
+    restart: unless-stopped
+    depends_on:
+      - headscale
+      - caddy
 
   postgres:
     image: postgres:16
@@ -179,6 +203,7 @@ services:
     environment:
       KONG_JWT_ISSUER: ${KONG_JWT_ISSUER}
       KONG_JWT_SECRET: ${KONG_JWT_SECRET}
+      HOST_IP: ${HOST_IP:-}
     depends_on:
       kong:
         condition: service_healthy
@@ -545,6 +570,7 @@ services:
       - surv_net
     command: python snapshot_worker.py
     environment:
+      DATABASE_URL:              ${DATABASE_URL}
       MINIO_ENDPOINT:            minio:9000
       MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
@@ -553,6 +579,8 @@ services:
       CAMERA_PATHS:              ${CAMERA_PATHS:-CAMKRTVM0001}
       SNAPSHOT_INTERVAL_SECONDS: "30"
     depends_on:
+      postgres:
+        condition: service_healthy
       minio:
         condition: service_healthy
       minio_init:

@@ -7,6 +7,7 @@ import logging
 import subprocess
 import boto3
 from datetime import datetime, timezone
+import psycopg2
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,14 +15,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+DATABASE_URL         = os.getenv("DATABASE_URL",            "")
 MINIO_ENDPOINT       = os.getenv("MINIO_ENDPOINT",          "minio:9000")
 MINIO_ACCESS_KEY     = os.getenv("MINIO_ACCESS_KEY",        "minioadmin")
 MINIO_SECRET_KEY     = os.getenv("MINIO_SECRET_KEY",        "minioadmin123")
 BUCKET_SNAPSHOTS     = os.getenv("MINIO_BUCKET_SNAPSHOTS",  "snapshots")
 MEDIAMTX_RTSP        = os.getenv("MEDIAMTX_RTSP_URL",       "rtsp://mediamtx:8554")
 SNAPSHOT_INTERVAL    = int(os.getenv("SNAPSHOT_INTERVAL_SECONDS", "30"))
-CAMERA_PATHS         = [c.strip() for c in
-                        os.getenv("CAMERA_PATHS", "CAMKRTVM0001").split(",")]
+DEFAULT_CAMERA_PATHS = [c.strip() for c in
+                        os.getenv("CAMERA_PATHS", "CAMKRTVM0001").split(",") if c.strip()]
+
+
+def get_db_connection():
+    if not DATABASE_URL:
+        return None
+    try:
+        return psycopg2.connect(DATABASE_URL)
+    except Exception as e:
+        logger.warning(f"Could not connect to database ({e}), using default camera paths")
+        return None
+
+
+def get_active_cameras(conn) -> list[str]:
+    """Query active cameras from database or fallback to DEFAULT_CAMERA_PATHS."""
+    if not conn:
+        return DEFAULT_CAMERA_PATHS
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT cam_id
+                  FROM survapp_camera_master
+                 WHERE is_active = true
+            """)
+            rows = cur.fetchall()
+            if rows:
+                return [r[0] for r in rows]
+    except Exception as e:
+        logger.error(f"Error querying active cameras: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    return DEFAULT_CAMERA_PATHS
 
 
 def capture_snapshot(camera_path: str) -> bytes | None:
@@ -52,7 +87,7 @@ def capture_snapshot(camera_path: str) -> bytes | None:
 
 
 def upload_snapshot(s3, camera_path: str, data: bytes) -> str:
-    """Upload JPEG to MinIO snapshots bucket. Returns the object key."""
+    """Upload JPEG to MinIO snapshots bucket. Writes timestamped key and latest.jpg."""
     ts  = datetime.now(timezone.utc)
     key = f"{camera_path}/{ts.strftime('%Y/%m/%d/%H-%M-%S')}.jpg"
 
@@ -62,7 +97,14 @@ def upload_snapshot(s3, camera_path: str, data: bytes) -> str:
         Key=key,
         ContentType="image/jpeg",
     )
-    logger.info(f"Snapshot uploaded: {key} ({len(data)} bytes)")
+    latest_key = f"{camera_path}/latest.jpg"
+    s3.put_object(
+        Body=data,
+        Bucket=BUCKET_SNAPSHOTS,
+        Key=latest_key,
+        ContentType="image/jpeg",
+    )
+    logger.info(f"Snapshot uploaded: {key} and {latest_key} ({len(data)} bytes)")
     return key
 
 
@@ -74,10 +116,17 @@ def main():
         aws_secret_access_key=MINIO_SECRET_KEY,
         region_name="us-east-1",
     )
-    logger.info(f"Snapshot worker started — cameras: {CAMERA_PATHS}, interval: {SNAPSHOT_INTERVAL}s")
+    conn = get_db_connection()
+    logger.info(f"Snapshot worker started — interval: {SNAPSHOT_INTERVAL}s")
 
     while True:
-        for cam in CAMERA_PATHS:
+        if not conn and DATABASE_URL:
+            conn = get_db_connection()
+        elif conn and conn.closed:
+            conn = get_db_connection()
+
+        camera_paths = get_active_cameras(conn)
+        for cam in camera_paths:
             data = capture_snapshot(cam)
             if data:
                 upload_snapshot(s3, cam, data)

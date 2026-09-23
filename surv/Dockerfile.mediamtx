@@ -1,6 +1,6 @@
 FROM bluenviron/mediamtx:latest-ffmpeg
 
-RUN apk add --no-cache python3 py3-pip
+RUN apk add --no-cache python3 py3-pip kcat
 
 RUN pip3 install --break-system-packages \
     minio \

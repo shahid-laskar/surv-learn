@@ -71,17 +71,21 @@ curl -s -X POST "$KONG_ADMIN/routes/hls-route/plugins" \
   -d "config.cookie_names=jwt" \
   > /dev/null || true
 
-# ── 3b. Unauthenticated login route ─────────────────────────────────────────
-# A second route to the SAME FastAPI service, scoped only to /api/v1/auth/login
-# and /health, with NO jwt plugin attached — this is how clients obtain a
-# token in the first place.
-echo "Configuring open auth route (login, no JWT required)..."
+# ── 3b. Unauthenticated open route ──────────────────────────────────────────
+# Scoped to endpoints that authenticate via credentials, webhooks, or X-Site-Token
+# (login, stream auth webhook, health, edge agent fleet heartbeat/config/backup, edge motion).
+echo "Configuring open route (no JWT required)..."
+curl -s -X DELETE "$KONG_ADMIN/routes/auth-open-route" > /dev/null 2>&1 || true
 curl -s -X POST "$KONG_ADMIN/services/surv-api/routes" \
   -d "name=auth-open-route" \
   -d "paths[]=/api/v1/auth/login" \
   -d "paths[]=/api/v1/auth/stream" \
   -d "paths[]=/health" \
   -d "paths[]=/api/v1/health" \
+  -d "paths[]=/api/v1/fleet/heartbeat" \
+  -d "paths[]=/api/v1/motion/edge" \
+  -d "paths[]=~/api/v1/fleet/[^/]+/config" \
+  -d "paths[]=~/api/v1/fleet/[^/]+/backup-clip" \
   -d "strip_path=false" \
   > /dev/null || true
 
@@ -120,10 +124,18 @@ curl -s -X POST "$KONG_ADMIN/services/surv-api/plugins" \
 # hit Kong first — FastAPI's CORSMiddleware never sees them. Kong must respond
 # to preflights itself with the correct Access-Control-* headers.
 echo "Enabling CORS plugin on surv-api service..."
+# Remove existing CORS plugin if present so updated origins take effect
+CORS_PLUGIN_ID=$(curl -s "$KONG_ADMIN/services/surv-api/plugins" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+if [ -n "$CORS_PLUGIN_ID" ]; then
+  curl -s -X DELETE "$KONG_ADMIN/plugins/$CORS_PLUGIN_ID" > /dev/null 2>&1 || true
+fi
+
 curl -s -X POST "$KONG_ADMIN/services/surv-api/plugins" \
   -d "name=cors" \
   -d "config.origins=https://sarvanetra.bsnl.co.in" \
-  -d "config.origins=http://10.44.0.209:3000" \
+  -d "config.origins=http://localhost:3000" \
+  -d "config.origins=http://127.0.0.1:3000" \
+  ${HOST_IP:+-d "config.origins=http://${HOST_IP}:3000"} \
   -d "config.methods[]=GET" \
   -d "config.methods[]=POST" \
   -d "config.methods[]=PUT" \
@@ -136,6 +148,7 @@ curl -s -X POST "$KONG_ADMIN/services/surv-api/plugins" \
   -d "config.headers[]=Accept" \
   -d "config.headers[]=Origin" \
   -d "config.headers[]=X-Requested-With" \
+  -d "config.headers[]=X-Site-Token" \
   -d "config.exposed_headers[]=Authorization" \
   -d "config.credentials=true" \
   -d "config.max_age=3600" \

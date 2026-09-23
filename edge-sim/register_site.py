@@ -7,7 +7,8 @@ import sys
 
 import httpx
 
-HUB_API = os.environ.get("HUB_API_URL", "http://10.44.0.209:8000/api/v1").rstrip("/")
+HUB_HOST = os.environ.get("HUB_HOST", "localhost")
+HUB_API = os.environ.get("HUB_API_URL", f"http://{HUB_HOST}:8000/api/v1").rstrip("/")
 ADMIN_USER = os.environ.get("HUB_ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("HUB_ADMIN_PASS", "admin123")
 

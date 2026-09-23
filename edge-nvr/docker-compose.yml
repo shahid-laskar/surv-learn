@@ -21,6 +21,10 @@ services:
   mediamtx:
     image: bluenviron/mediamtx:latest
     container_name: edge_mediamtx
+    environment:
+      MTX_AUTHMETHOD: ${EDGE_MEDIAMTX_AUTH_METHOD:-http}
+      MTX_AUTHHTTPADDRESS: ${HUB_API_URL}/auth/stream
+      MTX_AUTHHTTPEXCLUDE: api,metrics,pprof
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
       - recordings:/recordings
