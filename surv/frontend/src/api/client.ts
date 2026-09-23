@@ -627,4 +627,148 @@ export const unassignCameraFromNvr = (siteCode: string, camId: string) =>
 export const fetchNvrCameras = (siteCode: string) =>
   api.get<{ cam_id: string; cam_ip: string; is_online: boolean }[]>(`/fleet/${siteCode}/cameras`).then(r => r.data)
 
+// ── Parking Management (Nilakkal & Multi-site) ───────────────
+
+export interface ParkingZone {
+  id: number
+  customer_site_id?: number
+  zone_code: string
+  name: string
+  vehicle_type: string
+  total_capacity: number
+  current_occupancy: number
+  available_slots: number
+  occupancy_pct: number
+  is_active: boolean
+  display_order: number
+}
+
+export interface ParkingOccupancySummary {
+  total_zones: number
+  total_capacity: number
+  total_occupied: number
+  total_available: number
+  overall_occupancy_pct: number
+  zones: ParkingZone[]
+}
+
+export interface ParkingSlipOut {
+  session_id: number
+  slip_number: string
+  vehicle_number: string
+  vehicle_type: string
+  zone_code: string
+  zone_name: string
+  entry_time: string
+  exit_time?: string
+  duration_minutes?: number
+  status: string
+  fee_amount: number
+}
+
+export const fetchParkingZones = (siteId?: number) =>
+  api.get<ParkingZone[]>('/parking/zones', { params: siteId ? { site_id: siteId } : {} }).then(r => r.data)
+
+export const fetchParkingOccupancy = (siteId?: number) =>
+  api.get<ParkingOccupancySummary>('/parking/occupancy', { params: siteId ? { site_id: siteId } : {} }).then(r => r.data)
+
+export const submitVehicleEntry = (payload: {
+  vehicle_number: string
+  vehicle_type?: string
+  customer_site_id?: number
+  preferred_zone_id?: number
+}) => api.post<ParkingSlipOut>('/parking/entry', payload).then(r => r.data)
+
+export const submitVehicleExit = (payload: {
+  entry_slip_number?: string
+  vehicle_number?: string
+  customer_site_id?: number
+}) => api.post<ParkingSlipOut>('/parking/exit', payload).then(r => r.data)
+
+// ── ANPR Management Plane & Watchlists ───────────────────────
+
+export interface AnprTransaction {
+  id: number
+  customer_site_id?: number
+  camera_id?: number
+  lane_id?: number
+  plate_number: string
+  normalized_plate: string
+  confidence: number
+  vehicle_type?: string
+  vehicle_color?: string
+  speed_kmh?: number
+  direction?: string
+  snapshot_key?: string
+  video_reference?: string
+  processing_source: string
+  is_corrected: boolean
+  original_plate?: string
+  correction_notes?: string
+  captured_at: string
+}
+
+export interface WatchlistEntry {
+  id: number
+  plate_number: string
+  normalized_plate: string
+  category: string
+  severity: string
+  reason: string
+  case_number?: string
+  reporting_authority?: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface WatchlistAlert {
+  id: number
+  watchlist_id: number
+  anpr_transaction_id: number
+  plate_number: string
+  camera_id?: number
+  customer_site_id?: number
+  severity: string
+  status: string
+  notes?: string
+  created_at: string
+  acknowledged_at?: string
+}
+
+export const fetchAnprTransactions = (params?: {
+  camera_id?: number
+  site_id?: number
+  plate?: string
+  limit?: number
+}) => api.get<AnprTransaction[]>('/anpr/transactions', { params }).then(r => r.data)
+
+export const searchAnprPlates = (q: string, threshold: number = 0.3) =>
+  api.get<AnprTransaction[]>('/anpr/search', { params: { q, threshold } }).then(r => r.data)
+
+export const correctAnprPlate = (transactionId: number, corrected_plate: string, notes?: string) =>
+  api.post<AnprTransaction>(`/anpr/transactions/${transactionId}/correct`, {
+    corrected_plate,
+    correction_notes: notes,
+  }).then(r => r.data)
+
+export const fetchWatchlists = (category?: string) =>
+  api.get<WatchlistEntry[]>('/anpr/watchlists', { params: category ? { category } : {} }).then(r => r.data)
+
+export const createWatchlistEntry = (payload: {
+  plate_number: string
+  category: string
+  severity: string
+  reason: string
+  case_number?: string
+  reporting_authority?: string
+}) => api.post<WatchlistEntry>('/anpr/watchlists', payload).then(r => r.data)
+
+export const fetchWatchlistAlerts = (params?: {
+  status_filter?: string
+  severity?: string
+}) => api.get<WatchlistAlert[]>('/anpr/alerts', { params }).then(r => r.data)
+
+export const acknowledgeWatchlistAlert = (alertId: number, notes?: string) =>
+  api.post<WatchlistAlert>(`/anpr/alerts/${alertId}/acknowledge`, { notes }).then(r => r.data)
+
 export default api

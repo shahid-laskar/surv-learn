@@ -1,9 +1,12 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Bell, Activity } from 'lucide-react'
+import { Bell, Activity, Languages } from 'lucide-react'
 import Sidebar         from './components/Sidebar'
 import ProtectedRoute  from './components/ProtectedRoute'
 import Login            from './pages/Login'
 import LiveView         from './pages/LiveView'
+import IcccCommand      from './pages/IcccCommand'
+import ParkingManagement from './pages/ParkingManagement'
+import AnprManagement   from './pages/AnprManagement'
 import Playback         from './pages/Playback'
 import MotionEvents     from './pages/MotionEvents'
 import Cameras          from './pages/Cameras'
@@ -15,8 +18,10 @@ import AuditLog         from './pages/AuditLog'
 import CameraGroups     from './pages/CameraGroups'
 import Health           from './pages/Health'
 import NvrFleet         from './pages/NvrFleet'
+import { useI18n }       from './lib/i18n'
 
 function AppShell() {
+  const { t, toggleLanguage } = useI18n()
   const username = localStorage.getItem('username') ?? 'user'
   const initials = username
     .split(/\s+/)
@@ -43,16 +48,26 @@ function AppShell() {
             <span className="size-2 rounded-full animate-[pulse-dot_2s_ease-in-out_infinite]"
                   style={{ background: 'var(--color-success)' }} />
             <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
-              System nominal
+              {t('system_nominal')}
             </span>
           </div>
 
           <div className="flex items-center gap-3 ml-auto">
+            {/* Language switcher */}
+            <button
+              onClick={toggleLanguage}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition"
+              title="Toggle Malayalam / English"
+            >
+              <Languages size={13} className="text-sky-400" />
+              <span>{t('switch_language')}</span>
+            </button>
+
             {/* Activity */}
             <div className="hidden items-center gap-1.5 text-[11px] md:flex"
                  style={{ color: 'var(--color-muted-foreground)' }}>
               <Activity size={12} />
-              Realtime · connected
+              {t('realtime_connected')}
             </div>
 
             {/* Bell */}
@@ -81,6 +96,9 @@ function AppShell() {
         <main className="flex-1 overflow-y-auto min-w-0">
           <Routes>
             <Route path="/"              element={<LiveView />}     />
+            <Route path="/iccc"          element={<IcccCommand />}  />
+            <Route path="/parking"       element={<ParkingManagement />} />
+            <Route path="/anpr"          element={<AnprManagement />} />
             <Route path="/playback"      element={<Playback />}     />
             <Route path="/motion"        element={<MotionEvents />} />
             <Route path="/cameras"       element={<Cameras />}      />
@@ -91,7 +109,7 @@ function AppShell() {
             <Route path="/roles"         element={<Roles />}        />
             <Route path="/audit"         element={<AuditLog />}     />
             <Route path="/camera-groups" element={<CameraGroups />} />
-            <Route path="/fleet"         element={<NvrFleet />} />
+            <Route path="/fleet"         element={<NvrFleet />}     />
             <Route path="*"              element={<Navigate to="/" replace />} />
           </Routes>
         </main>

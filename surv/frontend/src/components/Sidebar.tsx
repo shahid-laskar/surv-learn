@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Video, PlaySquare, Bell, Camera, HeartPulse,
   Building2, Users, LogOut, ShieldCheck, ClipboardList,
-  Layers, UserCog, Server, Activity,
+  Layers, UserCog, Server, Activity, Radio, Car, ShieldAlert,
 } from 'lucide-react'
 import { usePolling } from '../hooks/usePolling'
 import {
@@ -13,6 +13,7 @@ import {
   type MotionEvent,
 } from '../api/client'
 import { hasPermission, hasRole, getRoles, getUserType } from '../lib/auth'
+import { useI18n } from '../lib/i18n'
 
 // UI failsafe: if the backend misses a `motion_end`, avoid showing the same
 // alert as "active forever".
@@ -35,6 +36,7 @@ type NavItem = {
 }
 
 export default function Sidebar() {
+  const { t } = useI18n()
   const { data: cameras      = [] } = usePolling<CameraType[]>(['cameras'],      fetchCameras,      20_000)
   const { data: activeMotion = [] } = usePolling<MotionEvent[]>(['motion-active'], fetchActiveMotion, 10_000)
   const activeMotionCount = activeMotion.filter(e => effectiveIsActive(e)).length
@@ -55,21 +57,25 @@ export default function Sidebar() {
     .slice(0, 2) || '?'
 
   const NAV: NavItem[] = [
-    // ── Always visible ────────────────────────────────────
-    { to: '/',         icon: Video,          label: 'Live View',      show: true },
-    { to: '/playback', icon: PlaySquare,     label: 'Playback',       show: true },
-    { to: '/motion',   icon: Bell,           label: 'Motion Alerts',  badge: activeMotionCount, show: true },
-    { to: '/cameras',  icon: Camera,         label: 'Cameras',        show: true },
-    { to: '/health',   icon: HeartPulse,     label: 'Health',         badge: offlineCount > 0 ? offlineCount : undefined, show: hasPermission('system.settings') || isAdmin },
-    // ── Camera Groups — visible to anyone with camera.view ─
-    { to: '/camera-groups', icon: Layers,    label: 'Camera Groups',  show: hasPermission('camera.view') || isAdmin },
+    // ── Command & Live Operations ─────────────────────────
+    { to: '/iccc',     icon: Radio,          label: t('nav_iccc'),          show: true },
+    { to: '/',         icon: Video,          label: t('nav_live_view'),     show: true },
+    { to: '/playback', icon: PlaySquare,     label: t('nav_playback'),      show: true },
+    { to: '/motion',   icon: Bell,           label: t('nav_motion_alerts'), badge: activeMotionCount, show: true },
+    { to: '/cameras',  icon: Camera,         label: t('nav_cameras'),       show: true },
+    // ── Tender / Security Grid Solutions ──────────────────
+    { to: '/parking',  icon: Car,            label: t('nav_parking'),       show: true },
+    { to: '/anpr',     icon: ShieldAlert,    label: t('nav_anpr'),          show: true },
+    { to: '/health',   icon: HeartPulse,     label: t('nav_health'),        badge: offlineCount > 0 ? offlineCount : undefined, show: hasPermission('system.settings') || isAdmin },
+    // ── Camera Groups ─────────────────────────────────────
+    { to: '/camera-groups', icon: Layers,    label: t('nav_camera_groups'), show: hasPermission('camera.view') || isAdmin },
     // ── Admin / manager pages ─────────────────────────────
-    { to: '/fleet',    icon: Server,         label: 'NVR Fleet',      show: hasRole('SUPER_ADMIN') || hasRole('INSTALLER') },
-    { to: '/org',      icon: Building2,      label: 'Organizations',  show: hasPermission('system.settings') || isAdmin },
-    { to: '/customers',icon: UserCog,        label: 'Customers',      show: true },
-    { to: '/users',    icon: Users,          label: 'Users',          show: hasPermission('user.view') || isAdmin },
-    { to: '/roles',    icon: ShieldCheck,    label: 'Roles & Perms',  show: hasPermission('system.settings') || isAdmin },
-    { to: '/audit',    icon: ClipboardList,  label: 'Audit Log',      show: hasPermission('system.audit') || isAdmin },
+    { to: '/fleet',    icon: Server,         label: t('nav_fleet'),         show: hasRole('SUPER_ADMIN') || hasRole('INSTALLER') },
+    { to: '/org',      icon: Building2,      label: t('nav_org'),           show: hasPermission('system.settings') || isAdmin },
+    { to: '/customers',icon: UserCog,        label: t('nav_customers'),     show: true },
+    { to: '/users',    icon: Users,          label: t('nav_users'),         show: hasPermission('user.view') || isAdmin },
+    { to: '/roles',    icon: ShieldCheck,    label: t('nav_roles'),         show: hasPermission('system.settings') || isAdmin },
+    { to: '/audit',    icon: ClipboardList,  label: t('nav_audit'),         show: hasPermission('system.audit') || isAdmin },
   ]
 
   return (
