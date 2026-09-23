@@ -26,3 +26,5 @@ from app.models.edge_segment import EdgeVideoSegment                 # noqa: F40
 from app.models.mobile import MobileDevice                           # noqa: F401
 from app.models.parking import ParkingZone, ParkingLane, ParkingSession  # noqa: F401
 from app.models.anpr import AnprTransaction, VehicleWatchlist, WatchlistAlert  # noqa: F401
+from app.models.incident import Incident, IncidentTimeline            # noqa: F401
+from app.models.evidence import EvidencePackage                       # noqa: F401

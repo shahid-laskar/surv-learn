@@ -8,7 +8,8 @@ from app.routers import (
     auth, stream_auth,
     organizations, customers, roles, audit, camera_groups,
     bsnl, fleet, mobile as mobile_router,
-    parking, anpr
+    parking, anpr,
+    incidents, evidence
 )
 from app.config import settings
 
@@ -77,6 +78,8 @@ app.include_router(bsnl.router,           prefix="") # Note: /api/v1/bsnl prefix
 app.include_router(mobile_router.router)
 app.include_router(parking.router,        prefix="/api/v1")
 app.include_router(anpr.router,           prefix="/api/v1")
+app.include_router(incidents.router,      prefix="/api/v1")
+app.include_router(evidence.router,       prefix="/api/v1")
 
 @app.get("/health", tags=["health"])
 async def root_health():
