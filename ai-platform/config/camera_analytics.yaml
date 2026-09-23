@@ -1,0 +1,68 @@
+# SARVANETRA Camera Analytics Runtime Configuration
+# Dynamic configuration per camera stream
+
+cameras:
+  - camera_id: "CAMKRTVM0001"
+    site_id: 1
+    stream_url: "rtsp://localhost:8554/CAMKRTVM0001"
+    sample_rate_fps: 2
+    analytics:
+      object_detection: true
+      tracking: true
+      anpr: false
+      intrusion: true
+      line_crossing: true
+      loitering: true
+      crowd_density: false
+      fall_detection: false
+    regions:
+      intrusion_zones:
+        - zone_id: "ZONE_GATE1_RESTRICTED"
+          polygon: [[0.1, 0.2], [0.8, 0.2], [0.8, 0.6], [0.1, 0.6]]
+          target_classes: ["person", "car"]
+      tripwires:
+        - tripwire_id: "WIRE_MAIN_ENTRY"
+          p1: [0.0, 0.5]
+          p2: [1.0, 0.5]
+          direction: "A_TO_B"
+          target_classes: ["person", "car"]
+      loitering_zones:
+        - zone_id: "ZONE_ATM_CORRIDOR"
+          polygon: [[0.2, 0.3], [0.6, 0.3], [0.6, 0.7], [0.2, 0.7]]
+          min_dwell_seconds: 15.0
+
+  - camera_id: "CAM_NILAKKAL_GATE1"
+    site_id: 1
+    stream_url: "rtsp://localhost:8554/CAM_NILAKKAL_GATE1"
+    sample_rate_fps: 5
+    analytics:
+      object_detection: true
+      tracking: true
+      anpr: true
+      intrusion: false
+      line_crossing: true
+      loitering: false
+      crowd_density: false
+      fall_detection: false
+    anpr:
+      confidence_threshold: 0.85
+      save_plate_crop: true
+
+  - camera_id: "CAM_PAMPA_TREK01"
+    site_id: 1
+    stream_url: "rtsp://localhost:8554/CAM_PAMPA_TREK01"
+    sample_rate_fps: 1
+    analytics:
+      object_detection: true
+      tracking: true
+      anpr: false
+      intrusion: false
+      line_crossing: false
+      loitering: false
+      crowd_density: true
+      fall_detection: true
+    crowd:
+      zone_id: "ZONE_PAMPA_QUEUE"
+      zone_area_sqm: 120.0
+      high_threshold_sqm: 2.5
+      critical_threshold_sqm: 4.0

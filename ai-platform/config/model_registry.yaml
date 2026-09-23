@@ -1,0 +1,70 @@
+# SARVANETRA AI Model Registry Specification
+# Document Version: 1.0 (Permissive Production Candidates)
+
+models:
+  - name: "yolox-general-detector"
+    version: "0.3.0"
+    task: "object_detection"
+    framework: "YOLOX"
+    runtime: "onnxruntime"
+    artifact_path: "models/yolox_s.onnx"
+    artifact_sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    license: "Apache-2.0"
+    commercial_cleared: true
+    input_size: [640, 640]
+    classes: ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
+    confidence_threshold: 0.50
+    nms_iou_threshold: 0.45
+    preferred_device: "cpu"
+    enabled: true
+
+  - name: "bytetrack-spatial-tracker"
+    version: "1.0.2"
+    task: "multi_object_tracking"
+    framework: "ByteTrack"
+    runtime: "python_native"
+    license: "MIT"
+    commercial_cleared: true
+    high_threshold: 0.60
+    low_threshold: 0.20
+    iou_threshold: 0.25
+    max_disappeared_frames: 30
+    enabled: true
+
+  - name: "pp-ocrv4-plate-recognizer"
+    version: "4.0.0"
+    task: "anpr_ocr"
+    framework: "PaddleOCR"
+    runtime: "onnxruntime"
+    artifact_path: "models/ch_PP-OCRv4_rec_infer.onnx"
+    artifact_sha256: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+    license: "Apache-2.0"
+    commercial_cleared: true
+    confidence_threshold: 0.80
+    normalization_strategy: "indian_rto_standard"
+    preferred_device: "cpu"
+    enabled: true
+
+  - name: "mediapipe-pose-fall"
+    version: "0.10.14"
+    task: "fall_detection"
+    framework: "MediaPipe"
+    runtime: "tflite_cpu"
+    license: "Apache-2.0"
+    commercial_cleared: true
+    num_landmarks: 33
+    ground_dwell_threshold_seconds: 5.0
+    preferred_device: "cpu"
+    enabled: true
+
+  - name: "crowd-density-regressor"
+    version: "1.0.0"
+    task: "crowd_density"
+    framework: "GeometricDensity"
+    runtime: "python_native"
+    license: "Apache-2.0"
+    commercial_cleared: true
+    grid_size_meters: 10.0
+    high_congestion_threshold_sqm: 2.5
+    critical_congestion_threshold_sqm: 4.0
+    enabled: true
