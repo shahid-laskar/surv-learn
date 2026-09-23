@@ -67,7 +67,7 @@ Features across the repository are classified according to actual code and confi
 | **Monitoring** | Camera Health & Uptime Worker | ✅ IMPLEMENTED | `surv/workers/status_monitor.py` | MediaMTX API / TCP port checks, logs transitions to `camera_status_log`. |
 | **Monitoring** | Status Webhook / DB Alerting | ✅ IMPLEMENTED | `surv/workers/notifier.py` | HTTP webhook + in-app DB notification on camera offline threshold. |
 | **Monitoring** | MediaMTX Ready/Down Hooks | ✅ IMPLEMENTED | `surv/scripts/camera_ready.sh`, `surv/Dockerfile.mediamtx` | MediaMTX image includes `kcat`; publishes ready/notReady events to Kafka `camera.status`. |
-| **Monitoring** | Kafka Camera Status Consumer | 🔴 NOT IMPLEMENTED | `surv/docker-compose.yml` | `camera.status` topic receives messages, but no consumer service exists. |
+| **Monitoring** | Kafka Camera Status Consumer | ✅ IMPLEMENTED | `surv/workers/status_consumer.py`, `surv/docker-compose.yml` | Consumes `camera.status` events, updates camera state, logs to `camera_status_log`. |
 | **Auth & Gateway** | Kong JWT Perimeter Validation | ✅ IMPLEMENTED | `surv/kong/setup-kong-jwt.sh`, `surv/docker-compose.yml` | Validates JWT for users; routes edge-agent `X-Site-Token` fleet and motion calls via open routes. |
 | **Auth & RBAC** | Hierarchical Scope Enforcement | ✅ IMPLEMENTED | `surv/app/services/access_service.py` | Filters cameras by `organization_closure` subtree, direct grants, groups. |
 | **Auth & RBAC** | Session Management & Revocation | ✅ IMPLEMENTED | `surv/app/services/auth_service.py`, `surv/app/routers/auth.py` | `user_session` tracking with server-side revocation on logout. |
@@ -80,6 +80,11 @@ Features across the repository are classified according to actual code and confi
 | **Fleet / Edge** | Simulated Site Harness | ✅ IMPLEMENTED | `edge-sim/` | Docker Compose stack running 3 fake FFmpeg cameras and edge agent. |
 | **VPN / Overlay**| Headscale & DERP Server | ✅ IMPLEMENTED | `surv/docker-compose.yml`, `surv/caddy/Caddyfile` | Headscale control plane + Hub Tailscale peer client (`surv_tailscale`) container. |
 | **VPN / Overlay**| Automated ACL Synchronization | ✅ IMPLEMENTED | `surv/app/services/acl_sync_service.py` | Maps BSNL organizations to Headscale namespaces and constructs role-based ACLs. |
+| **Parking** | Parking Domain & Allocation Engine | ✅ IMPLEMENTED | `surv/app/services/parking_service.py`, `0011_parking_anpr.py` | Multi-zone parking management, atomic `FOR UPDATE` slot allocation, slip generation. |
+| **ANPR** | Central Ingest & Fuzzy Search | ✅ IMPLEMENTED | `surv/app/services/anpr_service.py`, `surv/workers/synthetic_anpr.py` | Standardized REST ingest, GIN `pg_trgm` fuzzy matching, instant watchlist alerting. |
+| **ICCC / GIS** | Leaflet GIS & Bilingual UI | ✅ IMPLEMENTED | `surv/frontend/src/pages/GISView.tsx`, `i18n.ts` | Map-based COP with live camera status, parking pins, and English/Malayalam switching. |
+| **Incidents** | Incident Management Lifecycle | ✅ IMPLEMENTED | `surv/app/services/incident_service.py`, `0012_incident_evidence.py` | Case state machine (NEW -> ASSIGNED -> ESCALATED -> CLOSED) and timeline logs. |
+| **Evidence** | Cryptographic Evidence Sealing | ✅ IMPLEMENTED | `surv/app/services/evidence_service.py` | Court-admissible export packages with canonical SHA-256 digital manifests. |
 | **Mobile** | Mobile Device Token Registration | ✅ IMPLEMENTED | `surv/app/routers/mobile.py#L36-L80`, `0007_mobile_devices.py` | Upsert FCM/APNs push tokens per user in `mobile_device`. |
 | **Mobile** | Mobile Dashboard Summary API | ✅ IMPLEMENTED | `surv/app/routers/mobile.py#L82-L150` | Scoped camera list, online count, active motion, and last motion time. |
 | **Mobile** | Mobile VPN Session Issuance | 🔴 NOT IMPLEMENTED | `surv/app/routers/mobile.py#L159-L184` | Endpoints return HTTP 501 Not Implemented (pending Headscale client). |

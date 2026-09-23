@@ -110,7 +110,7 @@ Features designed or required for complete platform capability:
 | **P1-1** | Wire Hub Tailscale Peer Container | ✅ COMPLETE | Edge NVRs and remote viewers cannot reach Hub over VPN overlay | `surv/docker-compose.yml`, `surv/headscale/` | Headscale | MEDIUM |
 | **P1-2** | Implement Headscale ACL Sync Service | ✅ COMPLETE | Customer sites and users are not isolated on the WireGuard overlay | `surv/app/services/acl_sync_service.py` | Headscale API | HIGH |
 | **P1-3** | Edge MediaMTX Stream Authentication | ✅ COMPLETE | Anyone on the overlay can view any edge camera without a token | `edge-nvr/mediamtx/mediamtx.yml`, `surv/app/routers/stream_auth.py` | P1-1 | MEDIUM |
-| **P1-4** | End-to-End Test Suite for Core APIs | ✅ COMPLETE | Code changes risk breaking auth, cameras, or recordings | `surv/app/tests/` (35 passing tests) | Pytest | HIGH |
+| **P1-4** | End-to-End Test Suite for Core APIs | ✅ COMPLETE | 77 unit & chaos tests passing across Auth, Cameras, Fleet, Parking, ANPR, Evidence, Incidents | `surv/app/tests/` (77 passing tests) | Pytest | HIGH |
 
 ---
 
@@ -118,10 +118,15 @@ Features designed or required for complete platform capability:
 
 | Task ID | Task | Current State | Why Needed | Affected Components | Dependencies | Complexity |
 |---|---|---|---|---|---|---|
-| **P2-1** | Implement Kafka `camera.status` Consumer | Topic receives events but has no consumer | Enables automated alerting and decoupled status handling | `surv/workers/`, `surv/docker-compose.yml` | Kafka | MEDIUM |
+| **P2-1** | Implement Kafka `camera.status` Consumer | ✅ COMPLETE | `status_consumer.py` processes Kafka status events, updates DB, logs transitions | `surv/workers/status_consumer.py`, `surv/docker-compose.yml` | Kafka | MEDIUM |
 | **P2-2** | Clean Up Dead & Duplicate Files | ✅ COMPLETE | Causes developer confusion | `surv/workers/`, `surv/kong/`, `surv/` | None | LOW |
 | **P2-3** | Consolidate Duplicate Seed Scripts | ✅ COMPLETE | Risk of diverging seed data | `surv/app/scripts/`, `surv/scripts/` | None | LOW |
 | **P2-4** | Production Secret Sanitization | Default credentials in git | Prevents accidental production compromise | `surv/.env.example`, `edge-nvr/.env.example` | None | LOW |
+| **P2-5** | Smart Parking Allocation Engine | ✅ COMPLETE | Atomic row-level `FOR UPDATE` parking zone allocation engine | `surv/app/services/parking_service.py`, `0011_parking_anpr.py` | PostgreSQL | HIGH |
+| **P2-6** | ANPR Management Plane & Fuzzy Search | ✅ COMPLETE | REST ingest contract, pg_trgm GIN index, synthetic generator | `surv/app/services/anpr_service.py`, `synthetic_anpr.py` | Kafka | HIGH |
+| **P2-7** | GIS Common Operating Picture & i18n | ✅ COMPLETE | Leaflet map dashboard with live camera pins and English/Malayalam UI | `surv/frontend/src/pages/GISView.tsx`, `i18n.ts` | Frontend | MEDIUM |
+| **P2-8** | Incident Workflow & Evidence Sealing | ✅ COMPLETE | Incident lifecycle state machine, canonical SHA-256 evidence packages | `surv/app/services/evidence_service.py`, `0012_incident_evidence.py` | S3 | HIGH |
+| **P2-9** | Chaos Engineering & Resilience Tests | ✅ COMPLETE | Automated failure injection suite covering Kafka, DB, tokens, and MinIO | `surv/app/tests/test_chaos_resilience.py` | Pytest | HIGH |
 
 ---
 
