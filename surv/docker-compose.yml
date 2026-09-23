@@ -536,6 +536,26 @@ services:
       mediamtx:
         condition: service_started
 
+  status_consumer:
+    build:
+      context:    .
+      dockerfile: Dockerfile.worker
+    container_name: surv_status_consumer
+    restart: unless-stopped
+    networks:
+      - surv_net
+    command: python status_consumer.py
+    environment:
+      DATABASE_URL:            ${DATABASE_URL}
+      KAFKA_BOOTSTRAP_SERVERS: surv_kafka:9092
+      KAFKA_TOPIC_STATUS:      camera.status
+      ALERT_WEBHOOK_URL:       ${ALERT_WEBHOOK_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
   minio_cleaner:
     build:
       context:    .

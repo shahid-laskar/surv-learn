@@ -148,3 +148,52 @@ async def test_create_and_revoke_session():
     await revoke_session(mock_db, session_id)
     assert mock_session_obj.is_active is False
     mock_db.flush.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_missing_credentials():
+    from fastapi import HTTPException
+    from app.dependencies.auth import get_current_user
+
+    with pytest.raises(HTTPException) as exc:
+        await get_current_user(credentials=None)
+    assert exc.value.status_code == 401
+    assert "Missing bearer token" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_valid_token():
+    from fastapi.security import HTTPAuthorizationCredentials
+    from app.dependencies.auth import get_current_user
+
+    token, _ = create_access_token(
+        user_id=42,
+        username="alice",
+        user_type="EMPLOYEE",
+        org_id=1,
+        customer_id=None,
+        roles=["OPERATOR"],
+        permissions=["camera.live"],
+        session_id="session-xyz",
+    )
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    user = await get_current_user(credentials=creds)
+
+    assert user.user_id == 42
+    assert user.username == "alice"
+    assert user.has_permission("camera.live") is True
+    assert user.has_permission("camera.delete") is False
+    assert user.has_role("OPERATOR") is True
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_invalid_token():
+    from fastapi import HTTPException
+    from fastapi.security import HTTPAuthorizationCredentials
+    from app.dependencies.auth import get_current_user
+
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="invalid.token.payload")
+    with pytest.raises(HTTPException) as exc:
+        await get_current_user(credentials=creds)
+    assert exc.value.status_code == 401
+    assert "Invalid or expired token" in exc.value.detail

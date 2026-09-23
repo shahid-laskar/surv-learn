@@ -19,7 +19,7 @@ router = APIRouter(prefix="/recordings", tags=["recordings"])
 @router.get("/{cam_id}/timeline", response_model=TimelineOut)
 async def get_timeline(
     cam_id: str,
-    date:   str = Query(..., example="2026-06-27", description="YYYY-MM-DD"),
+    date:   str = Query(..., examples=["2026-06-27"], description="YYYY-MM-DD"),
     type:   str = Query(None, description="Filter by recording_type: full | motion | guard"),
     db:     AsyncSession = Depends(get_db),
     user:   CurrentUser = Depends(require_permission("camera.playback")),
