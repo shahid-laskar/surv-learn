@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.schemas.camera import CameraCreate, CameraUpdate
 from app.services.mediamtx_client import MediaMTXClient
@@ -149,3 +149,45 @@ async def test_mediamtx_add_and_remove_camera():
         mock_del.assert_called_once()
         args, _ = mock_del.call_args
         assert "/v3/config/paths/delete/CAM_TEST_API" in args[0]
+
+
+@pytest.mark.asyncio
+async def test_create_camera_router_duplicate():
+    from fastapi import HTTPException
+    from app.routers.cameras import create_camera
+
+    db = AsyncMock()
+    user = SimpleNamespace(username="admin_user")
+    payload = CameraCreate(
+        cam_id="CAM_DUP",
+        cam_ip="192.168.1.50",
+    )
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = SimpleNamespace(id=1, cam_id="CAM_DUP")
+    db.execute.return_value = mock_result
+
+    with pytest.raises(HTTPException) as exc:
+        await create_camera(payload=payload, db=db, user=user)
+    assert exc.value.status_code == 409
+    assert "already exists" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_deactivate_camera_router():
+    from app.routers.cameras import deactivate_camera
+
+    db = AsyncMock()
+    user = SimpleNamespace(username="admin_user", roles=["SUPER_ADMIN"], permissions=[])
+    cam = SimpleNamespace(id=10, cam_id="CAM_DEACT", is_active=True)
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = cam
+    db.execute.return_value = mock_result
+    db.commit = AsyncMock()
+
+    with patch("app.routers.cameras.mediamtx_client.remove_camera", new=AsyncMock()) as mock_remove:
+        with patch("app.routers.cameras.ensure_camera_accessible", new=AsyncMock()):
+            await deactivate_camera(cam_id="CAM_DEACT", db=db, user=user)
+            assert cam.is_active is False
+            db.commit.assert_called_once()
+            mock_remove.assert_called_once_with("CAM_DEACT")
