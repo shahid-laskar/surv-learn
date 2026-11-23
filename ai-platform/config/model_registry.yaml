@@ -1,7 +1,42 @@
 # SARVANETRA AI Model Registry Specification
-# Document Version: 1.0 (Permissive Production Candidates)
+# Document Version: 1.1 (Reconciled Acceptance Specification)
+# Distinguishes between active prototype artifacts on disk and target production candidates.
 
 models:
+  # ── Active On-Disk Runtime Prototypes (Validation & Integration Only) ────────
+  - name: "yolov8n-detector-prototype"
+    version: "8.2.0"
+    task: "object_detection"
+    framework: "Ultralytics YOLOv8n"
+    runtime: "onnxruntime"
+    artifact_path: "models/yolov8n_320.onnx"
+    artifact_sha256: "e33be869d4b90936837e1005dda5d3387de7a16a51367b59df7e9c639a34f2dc"
+    license: "AGPL-3.0"
+    status: "PROTOTYPE-ONLY"
+    commercial_cleared: false
+    input_size: [320, 320]
+    classes: ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
+    confidence_threshold: 0.40
+    nms_iou_threshold: 0.45
+    preferred_device: "cpu"
+    enabled: true
+
+  - name: "yolov8n-pose-prototype"
+    version: "8.2.0"
+    task: "pose_estimation"
+    framework: "Ultralytics YOLOv8n-Pose"
+    runtime: "onnxruntime"
+    artifact_path: "models/yolov8n_pose_320.onnx"
+    artifact_sha256: "1cd09ef2e01c791df7ef918422817b4bdda8c082622b5458fba193797560abc4"
+    license: "AGPL-3.0"
+    status: "PROTOTYPE-ONLY"
+    commercial_cleared: false
+    input_size: [320, 320]
+    keypoints: 17
+    preferred_device: "cpu"
+    enabled: true
+
+  # ── Production Candidate Stack (Permissive Open-Source Target) ─────────────
   - name: "yolox-general-detector"
     version: "0.3.0"
     task: "object_detection"
@@ -10,13 +45,14 @@ models:
     artifact_path: "models/yolox_s.onnx"
     artifact_sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
     license: "Apache-2.0"
+    status: "PRODUCTION-CANDIDATE"
     commercial_cleared: true
     input_size: [640, 640]
     classes: ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
     confidence_threshold: 0.50
     nms_iou_threshold: 0.45
     preferred_device: "cpu"
-    enabled: true
+    enabled: false  # Pending physical model artifact packaging
 
   - name: "bytetrack-spatial-tracker"
     version: "1.0.2"
@@ -24,6 +60,7 @@ models:
     framework: "ByteTrack"
     runtime: "python_native"
     license: "MIT"
+    status: "PRODUCTION-CANDIDATE"
     commercial_cleared: true
     high_threshold: 0.60
     low_threshold: 0.20
@@ -39,11 +76,12 @@ models:
     artifact_path: "models/ch_PP-OCRv4_rec_infer.onnx"
     artifact_sha256: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
     license: "Apache-2.0"
+    status: "PRODUCTION-CANDIDATE"
     commercial_cleared: true
     confidence_threshold: 0.80
     normalization_strategy: "indian_rto_standard"
     preferred_device: "cpu"
-    enabled: true
+    enabled: false  # Pending physical model artifact packaging
 
   - name: "mediapipe-pose-fall"
     version: "0.10.14"
@@ -51,11 +89,12 @@ models:
     framework: "MediaPipe"
     runtime: "tflite_cpu"
     license: "Apache-2.0"
+    status: "PRODUCTION-CANDIDATE"
     commercial_cleared: true
     num_landmarks: 33
     ground_dwell_threshold_seconds: 5.0
     preferred_device: "cpu"
-    enabled: true
+    enabled: false  # Pending pipeline implementation
 
   - name: "crowd-density-regressor"
     version: "1.0.0"
@@ -63,6 +102,7 @@ models:
     framework: "GeometricDensity"
     runtime: "python_native"
     license: "Apache-2.0"
+    status: "PRODUCTION-CANDIDATE"
     commercial_cleared: true
     grid_size_meters: 10.0
     high_congestion_threshold_sqm: 2.5

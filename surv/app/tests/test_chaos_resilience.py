@@ -16,12 +16,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-if "minio" not in sys.modules:
-    mock_minio = MagicMock()
-    sys.modules["minio"] = mock_minio
-    sys.modules["minio.error"] = MagicMock()
-if "kafka" not in sys.modules:
-    sys.modules["kafka"] = MagicMock()
+try:
+    import minio
+    import minio.error
+except ImportError:
+    if "minio" not in sys.modules:
+        sys.modules["minio"] = MagicMock()
+        sys.modules["minio.error"] = MagicMock()
+
+try:
+    import kafka
+except ImportError:
+    if "kafka" not in sys.modules:
+        sys.modules["kafka"] = MagicMock()
 
 import pytest
 from fastapi import HTTPException
