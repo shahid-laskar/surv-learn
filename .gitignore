@@ -8,3 +8,6 @@ __pycache__/
 node_modules/
 .venv/
 *.sqlite3
+certs/
+*.crt
+*.key
